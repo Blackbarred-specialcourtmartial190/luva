@@ -1,0 +1,13 @@
+Public sample captures used to exercise Luva parsers (not part of Luva's license; retain original terms).
+
+Wireshark SampleCaptures (wiki.wireshark.org; contributed traces for protocol testing):
+  - s7comm_reading_plc_status.pcap -> saved as s7comm_wireshark_reading_plc_status.pcap
+  - dnp3_read.pcap -> dnp3_wireshark_read.pcap
+  - iec104.pcap -> iec104_wireshark.pcap
+
+w3h/icsmaster (GitHub): https://github.com/w3h/icsmaster
+  - pcap/modbus/modbus_test_data_part1.pcap -> modbus_icsmaster_part1.pcap
+  - pcap/opc/opc-ua-ap-method-wireshark-freeze.pcap -> opcua_icsmaster_method.pcap
+  - pcap/enip/enip_test.pcap -> enip_icsmaster_test.pcap
+
+Re-download: run ./fetch_public_pcaps.sh from this directory.

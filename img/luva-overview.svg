@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 280" width="800" height="280" role="img" aria-labelledby="title desc">
+  <title id="title">Luva — passive PCAP to structured OT/ICS reports</title>
+  <desc id="desc">Flow from capture files through Luva analyzer to JSON, HTML, CSV, and GraphML outputs.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f8f9fa"/>
+      <stop offset="100%" style="stop-color:#e8eaed"/>
+    </linearGradient>
+    <filter id="sh" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-opacity="0.12"/>
+    </filter>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <polygon points="0 0, 8 4, 0 8" fill="#1a73e8"/>
+    </marker>
+  </defs>
+  <rect width="800" height="280" fill="url(#bg)" rx="12"/>
+  <text x="400" y="36" text-anchor="middle" fill="#202124" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="20" font-weight="600">Luva — passive ICS / SCADA capture analysis</text>
+  <text x="400" y="58" text-anchor="middle" fill="#5f6368" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="12">Read-only · No live sniffing · AGPL-3.0</text>
+  <g filter="url(#sh)">
+    <rect x="40" y="95" width="140" height="100" rx="10" fill="#fff" stroke="#dadce0" stroke-width="1.5"/>
+    <text x="110" y="130" text-anchor="middle" fill="#174ea6" font-family="Segoe UI, Roboto, sans-serif" font-size="13" font-weight="600">Capture files</text>
+    <text x="110" y="152" text-anchor="middle" fill="#5f6368" font-family="Segoe UI, Roboto, sans-serif" font-size="11">.pcap · .pcapng</text>
+    <text x="110" y="170" text-anchor="middle" fill="#5f6368" font-family="Segoe UI, Roboto, sans-serif" font-size="11">.gz</text>
+  </g>
+  <path d="M 190 145 L 235 145" stroke="#1a73e8" stroke-width="2.5" fill="none" marker-end="url(#arr)"/>
+  <g filter="url(#sh)">
+    <rect x="240" y="85" width="160" height="120" rx="10" fill="#d2e3fc" stroke="#1a73e8" stroke-width="1.5"/>
+    <text x="320" y="118" text-anchor="middle" fill="#174ea6" font-family="Segoe UI, Roboto, sans-serif" font-size="15" font-weight="700">Luva</text>
+    <text x="320" y="142" text-anchor="middle" fill="#202124" font-family="Segoe UI, Roboto, sans-serif" font-size="11">Parsers · Flows · Rules</text>
+    <text x="320" y="160" text-anchor="middle" fill="#202124" font-family="Segoe UI, Roboto, sans-serif" font-size="11">Topology · Reports</text>
+    <text x="320" y="186" text-anchor="middle" fill="#5f6368" font-family="Segoe UI, Roboto, sans-serif" font-size="10">Python 3.10+</text>
+  </g>
+  <path d="M 405 145 L 450 145" stroke="#1a73e8" stroke-width="2.5" fill="none" marker-end="url(#arr)"/>
+  <g filter="url(#sh)">
+    <rect x="455" y="88" width="305" height="134" rx="10" fill="#fff" stroke="#dadce0" stroke-width="1.5"/>
+    <text x="607" y="112" text-anchor="middle" fill="#174ea6" font-family="Segoe UI, Roboto, sans-serif" font-size="13" font-weight="600">Exports</text>
+    <text x="475" y="138" fill="#202124" font-family="Segoe UI, Roboto, sans-serif" font-size="11">• JSON report</text>
+    <text x="475" y="156" fill="#202124" font-family="Segoe UI, Roboto, sans-serif" font-size="11">• HTML dashboard</text>
+    <text x="475" y="174" fill="#202124" font-family="Segoe UI, Roboto, sans-serif" font-size="11">• CSV (assets, flows…)</text>
+    <text x="600" y="138" fill="#202124" font-family="Segoe UI, Roboto, sans-serif" font-size="11">• GraphML</text>
+    <text x="600" y="156" fill="#202124" font-family="Segoe UI, Roboto, sans-serif" font-size="11">• Comm map HTML</text>
+    <text x="600" y="174" fill="#202124" font-family="Segoe UI, Roboto, sans-serif" font-size="11">• NDJSON (optional)</text>
+    <text x="607" y="204" text-anchor="middle" fill="#5f6368" font-family="Segoe UI, Roboto, sans-serif" font-size="9">UTC-stamped filenames (CLI default)</text>
+  </g>
+</svg>

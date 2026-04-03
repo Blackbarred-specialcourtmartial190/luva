@@ -1,0 +1,34 @@
+rules:
+  - id: S7-001
+    name: "S7 PLC control / STOP"
+    description: "S7 PLC Control (0x28) or PLC Stop (0x29) — mode change / run-stop class activity."
+    severity: CRITICAL
+    category: PROTOCOL
+    condition:
+      protocol: s7
+      service_code:
+        in: [40, 41]
+    evidence_fields: [s7_function_name, s7_function_code]
+    enabled: true
+  - id: S7-002
+    name: "S7 Job Write Variable"
+    description: "S7 write-variable job (0x05) — modifies PLC data; verify authorized engineering host."
+    severity: CRITICAL
+    category: PROTOCOL
+    condition:
+      protocol: s7
+      service_code:
+        in: [5]
+    evidence_fields: [s7_function_name]
+    enabled: false
+  - id: S7-003
+    name: "S7 program download (block transfer)"
+    description: "S7 download block or download handshake (0x1A–0x1D) — possible firmware/logic transfer."
+    severity: CRITICAL
+    category: PROTOCOL
+    condition:
+      protocol: s7
+      service_code:
+        in: [26, 27, 28, 29]
+    evidence_fields: [s7_function_name]
+    enabled: false

@@ -1,0 +1,87 @@
+[build-system]
+requires = ["setuptools>=68.0", "setuptools-scm>=8.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "luva"
+version = "1.0.0"
+description = "Luva — passive ICS/SCADA PCAP and PCAPNG analysis"
+readme = "README.md"
+authors = [{ name = "Cuma KURT", email = "cumakurt@gmail.com" }]
+license = "AGPL-3.0-only"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+keywords = ["ics", "scada", "pcap", "ot-security", "luva"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Information Technology",
+    "Topic :: Security",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+
+dependencies = [
+    "scapy>=2.5",
+    "networkx>=3.0",
+    "rich>=13.0",
+    "typer>=0.9",
+    "pyyaml>=6.0",
+    "jinja2>=3.0",
+    "numpy>=1.24",
+]
+
+[project.urls]
+Homepage = "https://github.com/cumakurt/luva"
+Repository = "https://github.com/cumakurt/luva"
+Issues = "https://github.com/cumakurt/luva/issues"
+Changelog = "https://github.com/cumakurt/luva/releases"
+LinkedIn = "https://www.linkedin.com/in/cuma-kurt-34414917/"
+
+[project.scripts]
+luva = "luva.cli.main:cli"
+ot-baseline = "ot_baseline.cli:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.1",
+    "mypy>=1.0",
+    "types-PyYAML>=6.0",
+    "types-networkx>=3.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["luva*", "ot_baseline*"]
+
+[tool.setuptools.package-data]
+luva = ["output/templates/*.j2", "output/static/*.js"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.pytest.ini_options]
+testpaths = ["luva/tests", "ot_baseline/tests"]
+addopts = "-v --tb=short"
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+exclude = "(^luva/tests/)"
+
+[[tool.mypy.overrides]]
+module = [
+    "scapy",
+    "scapy.all",
+    "scapy.layers.*",
+]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "luva.engine.pcap_reader"
+disable_error_code = ["attr-defined"]

@@ -1,0 +1,10 @@
+rules:
+  - id: GEN-001
+    name: "New Communication Pair"
+    description: "A new source-destination pair observed in ICS traffic."
+    severity: LOW
+    category: NETWORK
+    condition:
+      protocol: modbus
+      message_type: request
+    enabled: false

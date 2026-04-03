@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Luva — OT communication map</title>
+  {% if d3_inline %}
+  <script>{{ d3_inline | safe }}</script>
+  {% else %}
+  <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js" crossorigin="anonymous"></script>
+  {% endif %}
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --bg: #f8f9fa;
+      --surface: #ffffff;
+      --border: #dadce0;
+      --text: #202124;
+      --muted: #5f6368;
+      --accent: #1a73e8;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Roboto, "Helvetica Neue", Arial, sans-serif; background: var(--bg); color: var(--text); }
+    .bar {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem 1.25rem;
+      padding: 0.85rem 1.25rem; border-bottom: 1px solid var(--border); background: var(--surface);
+    }
+    .bar h1 { margin: 0; font-size: 1.1rem; font-weight: 600; }
+    .bar label { font-size: 0.82rem; color: var(--muted); display: flex; align-items: center; gap: 0.35rem; }
+    .bar input[type="search"] {
+      padding: 0.4rem 0.65rem; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--surface); color: var(--text); min-width: 200px;
+    }
+    .layout { display: grid; grid-template-columns: 1fr 320px; min-height: calc(100vh - 56px); }
+    @media (max-width: 960px) { .layout { grid-template-columns: 1fr; } }
+    #chart-wrap { position: relative; overflow: hidden; }
+    #chart { width: 100%; height: min(78vh, 820px); cursor: grab; }
+    #chart:active { cursor: grabbing; }
+    .node circle { stroke: var(--border); stroke-width: 1.5px; }
+    .node text { font-size: 10px; fill: var(--text); pointer-events: none; text-shadow: 0 0 2px #fff, 0 0 4px #fff; }
+    .link { fill: none; stroke-opacity: 0.55; }
+    .link.dim { stroke-opacity: 0.08; }
+    .node.dim circle { opacity: 0.2; }
+    .node.dim text { opacity: 0.15; }
+    aside {
+      border-left: 1px solid var(--border); padding: 1rem; font-size: 0.8rem; overflow-y: auto;
+      max-height: min(78vh, 820px); background: var(--surface);
+    }
+    aside h2 { margin: 0 0 0.5rem; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+    aside .kv { margin: 0.35rem 0; }
+    aside .k { color: var(--muted); }
+    table.sess { width: 100%; border-collapse: collapse; font-size: 0.72rem; margin-top: 0.5rem; }
+    table.sess th, table.sess td { border: 1px solid var(--border); padding: 0.3rem; text-align: left; }
+    table.sess th { background: var(--surface); color: var(--muted); }
+    .legend { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; font-size: 0.72rem; color: var(--muted); margin-top: 0.5rem; }
+    .lg { display: inline-flex; align-items: center; gap: 0.25rem; }
+    .sw { width: 12px; height: 12px; border-radius: 2px; }
+    .warn { background: #fef7e0; border: 1px solid #fbc02d; color: #b06000; padding: 0.5rem 0.75rem; border-radius: 8px; font-size: 0.8rem; margin: 0.5rem 1rem; }
+  </style>
+</head>
+<body>
+  <div class="bar">
+    <h1>Luva — ICS / OT communication map</h1>
+    <label><input type="checkbox" id="ics-only"/> ICS-labelled sessions only</label>
+    <label>Find host <input type="search" id="q" placeholder="IP substring…"/></label>
+    <span style="color:var(--muted);font-size:0.78rem;" id="counts"></span>
+  </div>
+  <div id="trunc-warn" class="warn" style="display:none;"></div>
+  <div class="layout">
+    <div id="chart-wrap">
+      <svg id="chart"></svg>
+      <div class="legend" id="legend"></div>
+    </div>
+    <aside id="detail">
+      <h2>Selection</h2>
+      <p style="color:var(--muted)">Click a node or link. Drag nodes to rearrange. Scroll to zoom.</p>
+    </aside>
+  </div>
+
+  <script type="application/json" id="luva-map-data">{{ report_json }}</script>
+  <script>
+  (function() {
+    const PAYLOAD = JSON.parse(document.getElementById('luva-map-data').textContent);
+    const G = PAYLOAD.graph || { nodes: [], links: [] };
+    const META = PAYLOAD.graph_meta || {};
+    const meta = PAYLOAD.metadata || {};
+
+    if (META.communication_graph_truncated) {
+      const w = document.getElementById('trunc-warn');
+      w.style.display = 'block';
+      w.textContent = 'Graph truncated: showing top ' + (META.communication_graph_edge_cap || '') +
+        ' IP pairs by packet count (' + (META.communication_graph_total_pairs || '') + ' pairs before cap).';
+    }
+
+    const PROTO_COLORS = {
+      'Modbus': '#1a73e8', 'S7': '#9334e6', 'DNP3': '#1e8e3e', 'OPC UA': '#fa903e',
+      'EtherNet/IP': '#f9ab00', 'IEC 104': '#ea4335', 'BACnet': '#4285f4', 'MQTT': '#9334e6',
+      'SNMP': '#188038', 'TCP': '#5f6368', 'UDP': '#80868b', 'IP': '#3c4043'
+    };
+    function linkColor(link) {
+      const u = link.ics_protocols_union || [];
+      if (u.length) return PROTO_COLORS[u[0]] || '#79c0ff';
+      const s = (link.sessions && link.sessions[0]) || {};
+      const t = (s.transport || 'TCP');
+      return PROTO_COLORS[t] || '#8b949e';
+    }
+
+    const legendEl = document.getElementById('legend');
+    ['Modbus','S7','DNP3','OPC UA','EtherNet/IP','IEC 104','BACnet','MQTT','SNMP','TCP','UDP'].forEach(name => {
+      const c = PROTO_COLORS[name] || '#79c0ff';
+      const d = document.createElement('span');
+      d.className = 'lg';
+      d.innerHTML = '<span class="sw" style="background:' + c + '"></span> ' + name;
+      legendEl.appendChild(d);
+    });
+
+    const svg = d3.select('#chart');
+    const wrap = document.getElementById('chart-wrap');
+    function sizeSvg() {
+      const w = wrap.clientWidth || 800;
+      const h = Math.min(window.innerHeight - 140, 820);
+      svg.attr('width', w).attr('height', h);
+      return { w, h };
+    }
+    let { w, h } = sizeSvg();
+
+    const gRoot = svg.append('g');
+    const zoom = d3.zoom().scaleExtent([0.15, 4]).on('zoom', ev => gRoot.attr('transform', ev.transform));
+    svg.call(zoom);
+
+    const nodes = (G.nodes || []).map(d => Object.assign({}, d));
+    const linksRaw = (G.links || []).map(d => Object.assign({}, d));
+    let icsOnly = false;
+    let filterQ = '';
+
+    function linkVisible(l) {
+      if (icsOnly) {
+        const ok = (l.sessions || []).some(s => s.is_ics_traffic);
+        if (!ok) return false;
+      }
+      if (filterQ) {
+        const q = filterQ.toLowerCase();
+        if (!l.source.toLowerCase().includes(q) && !l.target.toLowerCase().includes(q)) return false;
+      }
+      return true;
+    }
+
+    function rebuild() {
+      gRoot.selectAll('*').remove();
+      const visLinks = linksRaw.filter(linkVisible).map(l => ({
+        ...l,
+        source: l.source,
+        target: l.target,
+      }));
+      const activeIps = new Set();
+      visLinks.forEach(l => { activeIps.add(l.source); activeIps.add(l.target); });
+      const visNodes = nodes.filter(n => activeIps.has(n.id));
+
+      document.getElementById('counts').textContent =
+        visNodes.length + ' hosts · ' + visLinks.length + ' directed pairs · ' +
+        (meta.total_packets != null ? meta.total_packets.toLocaleString() + ' pkts (capture)' : '');
+
+      if (!visNodes.length) {
+        gRoot.append('text').attr('x', w/2).attr('y', h/2).attr('text-anchor', 'middle').attr('fill', '#8b949e')
+          .text('No links match filters.');
+        return;
+      }
+
+      const maxP = d3.max(visLinks, d => d.total_packets) || 1;
+      const linkScale = d3.scaleSqrt().domain([1, maxP]).range([0.6, 10]);
+
+      const simulation = d3.forceSimulation(visNodes)
+        .force('link', d3.forceLink(visLinks).id(d => d.id).distance(d => 40 + 120 * (1 - d.total_packets / maxP)).strength(0.6))
+        .force('charge', d3.forceManyBody().strength(-320))
+        .force('cx', d3.forceX(w/2).strength(0.04))
+        .force('cy', d3.forceY(h/2).strength(0.04))
+        .force('collide', d3.forceCollide().radius(d => 10 + Math.min(22, (d.risk_score || 0) * 2)));
+
+      const link = gRoot.append('g').attr('class', 'links').selectAll('path').data(visLinks).join('path')
+        .attr('class', 'link')
+        .attr('stroke', d => linkColor(d))
+        .attr('stroke-width', d => linkScale(d.total_packets));
+
+      const node = gRoot.append('g').attr('class', 'nodes').selectAll('g').data(visNodes).join('g').attr('class', 'node')
+        .call(d3.drag().on('start', (ev, d) => { if (!ev.active) simulation.alphaTarget(0.35).restart(); d.fx = d.x; d.fy = d.y; })
+          .on('drag', (ev, d) => { d.fx = ev.x; d.fy = ev.y; })
+          .on('end', (ev, d) => { if (!ev.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; }));
+
+      node.append('circle')
+        .attr('r', d => 8 + Math.min(14, (d.risk_score || 0) * 1.2))
+        .attr('fill', d => (d.risk_score >= 6) ? '#f8514988' : (d.risk_score >= 3 ? '#d2992244' : '#30363d'))
+        .attr('stroke', d => (d.risk_score >= 6) ? '#f85149' : '#58a6ff');
+
+      node.append('text').attr('dx', 12).attr('dy', 4).text(d => d.ip);
+
+      function linkEndpointId(x) { return typeof x === 'object' && x && x.id ? x.id : x; }
+
+      function highlightNode(ip) {
+        const neigh = new Set([ip]);
+        visLinks.forEach(l => {
+          const s = linkEndpointId(l.source);
+          const t = linkEndpointId(l.target);
+          if (s === ip) neigh.add(t);
+          if (t === ip) neigh.add(s);
+        });
+        node.classed('dim', n => !neigh.has(n.id));
+        link.classed('dim', l => {
+          const s = linkEndpointId(l.source);
+          const t = linkEndpointId(l.target);
+          return s !== ip && t !== ip;
+        });
+      }
+
+      function highlightLink(d) {
+        const s = linkEndpointId(d.source);
+        const t = linkEndpointId(d.target);
+        node.classed('dim', n => n.id !== s && n.id !== t);
+        link.classed('dim', l => {
+          const ls = linkEndpointId(l.source);
+          const lt = linkEndpointId(l.target);
+          return !((ls === s && lt === t) || (ls === t && lt === s));
+        });
+      }
+
+      simulation.on('tick', () => {
+        link.attr('d', d => {
+          const sx = d.source.x, sy = d.source.y, tx = d.target.x, ty = d.target.y;
+          const mx = (sx + tx) / 2, my = (sy + ty) / 2;
+          const dx = tx - sx, dy = ty - sy;
+          const len = Math.sqrt(dx*dx+dy*dy) || 1;
+          const off = 8;
+          const nx = -dy / len * off, ny = dx / len * off;
+          return 'M' + sx + ',' + sy + ' Q' + (mx+nx) + ',' + (my+ny) + ' ' + tx + ',' + ty;
+        });
+        node.attr('transform', d => 'translate(' + d.x + ',' + d.y + ')');
+      });
+
+      function showNode(d) {
+        const el = document.getElementById('detail');
+        el.innerHTML = '<h2>Host</h2>' +
+          '<div class="kv"><span class="k">IP</span> ' + d.ip + '</div>' +
+          '<div class="kv"><span class="k">Role</span> ' + (d.role || '—') + '</div>' +
+          '<div class="kv"><span class="k">Vendor</span> ' + (d.vendor || '—') + '</div>' +
+          '<div class="kv"><span class="k">MAC</span> ' + (d.mac_address || '—') + '</div>' +
+          '<div class="kv"><span class="k">Risk</span> ' + (d.risk_score ?? '—') + '</div>' +
+          '<div class="kv"><span class="k">Protocols seen</span> ' + (d.protocols_seen || []).join(', ') + '</div>' +
+          '<div class="kv"><span class="k">Open ports (sample)</span> ' + (d.open_ports_sample || []).join(', ') + '</div>';
+      }
+
+      function showLink(d) {
+        const el = document.getElementById('detail');
+        const src = linkEndpointId(d.source);
+        const tgt = linkEndpointId(d.target);
+        let rows = (d.sessions || []).map(s =>
+          '<tr><td>' + (s.protocols_display || '') + '</td><td>' + (s.transport||'') + '</td><td>' +
+          s.l4_src_port + '→' + s.l4_dst_port + '</td><td>' + s.packets + '</td><td>' + s.bytes + '</td><td>' +
+          (s.has_write_operations ? 'yes' : '') + '</td></tr>'
+        ).join('');
+        el.innerHTML = '<h2>Link</h2>' +
+          '<div class="kv"><span class="k">Source → Target</span> ' + src + ' → ' + tgt + '</div>' +
+          '<div class="kv"><span class="k">Total packets / bytes</span> ' + d.total_packets + ' / ' + d.total_bytes + '</div>' +
+          '<div class="kv"><span class="k">Bidirectional pair seen</span> ' + (d.bidirectional ? 'yes' : 'no') + '</div>' +
+          '<div class="kv"><span class="k">ICS protocols (union)</span> ' + (d.ics_protocols_union || []).join(', ') + '</div>' +
+          '<h2 style="margin-top:0.75rem">Sessions (5-tuple aggregates)</h2>' +
+          '<table class="sess"><thead><tr><th>Application</th><th>L4</th><th>Ports</th><th>Pkts</th><th>Bytes</th><th>Write</th></tr></thead><tbody>' +
+          rows + '</tbody></table>';
+      }
+
+      node.on('click', (ev, d) => { ev.stopPropagation(); showNode(d); highlightNode(d.id); });
+      link.on('click', (ev, d) => { ev.stopPropagation(); showLink(d); highlightLink(d); });
+      svg.on('click', () => {
+        gRoot.selectAll('.dim').classed('dim', false);
+        document.getElementById('detail').innerHTML = '<h2>Selection</h2><p style="color:var(--muted)">Click a node or link.</p>';
+      });
+    }
+
+    document.getElementById('ics-only').addEventListener('change', e => { icsOnly = e.target.checked; rebuild(); });
+    document.getElementById('q').addEventListener('input', e => { filterQ = e.target.value.trim(); rebuild(); });
+    window.addEventListener('resize', () => { ({ w, h } = sizeSvg()); rebuild(); });
+
+    rebuild();
+  })();
+  </script>
+  <footer style="padding:0.5rem 1rem;color:#8b949e;font-size:0.72rem;border-top:1px solid #30363d;">
+    Luva {{ version }} — Passive analysis. Edge width ∝ packets between the IP pair; tooltips in panel. AGPL-3.0.
+  </footer>
+</body>
+</html>

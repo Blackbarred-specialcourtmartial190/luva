@@ -1,0 +1,26 @@
+rules:
+  - id: DNP3-001
+    name: "DNP3 Cold or Warm Restart"
+    description: "Device restart command in DNP3 application layer."
+    severity: HIGH
+    category: PROTOCOL
+    condition:
+      protocol: dnp3
+      function_code:
+        in: [13, 14]
+    evidence_fields: [function_code]
+    tags: [restart, operational-impact]
+    enabled: true
+
+  - id: DNP3-002
+    name: "DNP3 Direct Operate / Operate"
+    description: "Control-style operate command (potential physical impact)."
+    severity: MEDIUM
+    category: PROTOCOL
+    condition:
+      protocol: dnp3
+      function_code:
+        in: [4, 5, 6]
+    evidence_fields: [function_code]
+    tags: [control, write]
+    enabled: true

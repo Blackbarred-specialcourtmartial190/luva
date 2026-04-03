@@ -1,0 +1,13 @@
+rules:
+  - id: MB-001
+    name: "Modbus Broadcast Write"
+    description: "Write operation to Modbus broadcast unit id."
+    severity: HIGH
+    category: PROTOCOL
+    condition:
+      protocol: modbus
+      function_code:
+        in: [5, 6, 15, 16]
+      unit_id: 255
+    evidence_fields: [unit_id, function_code]
+    enabled: true

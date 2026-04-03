@@ -1,0 +1,1768 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Luva — Interactive PCAP assessment</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet"/>
+  {% if chart_js_inline %}
+  <script>{{ chart_js_inline | safe }}</script>
+  {% else %}
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+  {% endif %}
+  <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js" crossorigin="anonymous"></script>
+  <link rel="stylesheet" href="https://unpkg.com/vis-network@9.1.9/styles/vis-network.min.css" crossorigin="anonymous"/>
+  <script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      important: "#luva-report-root",
+      theme: {
+        extend: {
+          fontFamily: { sans: ["Roboto", "Google Sans", "Helvetica Neue", "Arial", "sans-serif"], mono: ["Roboto Mono", "ui-monospace", "monospace"] },
+        },
+      },
+    };
+  </script>
+  <style>
+    /* Material Design 3–inspired light tokens (Google product palette) */
+    :root {
+      --bg: #f8f9fa;
+      --surface: #ffffff;
+      --surface-variant: #e8eaed;
+      --border: #dadce0;
+      --text: #202124;
+      --muted: #5f6368;
+      --accent: #1a73e8;
+      --primary-container: #d2e3fc;
+      --danger: #d93025;
+      --warn: #f9ab00;
+      --ok: #1e8e3e;
+      --purple: #9334e6;
+      --outline: #747775;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      font-family: Roboto, "Google Sans", "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg); color: var(--text); line-height: 1.5;
+    }
+    html { height: 100%; }
+    #luva-report-root {
+      min-height: 100vh;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+    }
+    .app-layout { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+    .wrap.flex-col {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      max-width: min(1920px, 100%);
+      width: 100%;
+      margin: 0 auto;
+      padding: 0.75rem 1.25rem 1.25rem;
+    }
+    #luva-report-root .card-glass {
+      border-radius: 1rem;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      box-shadow: 0 1px 2px rgba(60, 64, 67, 0.12), 0 1px 3px 1px rgba(60, 64, 67, 0.08);
+    }
+    header {
+      border-bottom: 1px solid var(--border); padding-bottom: 1rem; margin-bottom: 1.5rem;
+      display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 1rem;
+    }
+    header h1 { margin: 0; font-size: 1.45rem; font-weight: 500; letter-spacing: -0.01em; color: var(--text); }
+    header .sub { color: var(--muted); font-size: 0.85rem; max-width: 42rem; }
+    .badge { display: inline-block; padding: 0.2rem 0.55rem; border-radius: 1rem; font-size: 0.7rem; font-weight: 500;
+      background: var(--primary-container); border: 1px solid transparent; color: #174ea6; }
+    nav.tabs {
+      display: flex; flex-wrap: wrap; gap: 0.35rem;
+    }
+    nav.tabs.sticky-tabs {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      flex-shrink: 0;
+      padding: 0.35rem 0 0.65rem;
+      margin: 0 0 0.35rem;
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    .panel-stage {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      -webkit-overflow-scrolling: touch;
+      padding-bottom: 0.5rem;
+    }
+    .section-title {
+      font-size: 0.95rem;
+      font-weight: 500;
+      color: var(--text);
+      margin: 0 0 0.65rem;
+      letter-spacing: 0.01em;
+    }
+    nav.tabs button {
+      background: var(--surface); border: 1px solid var(--border); color: var(--muted);
+      padding: 0.5rem 0.9rem; border-radius: 1.25rem; cursor: pointer; font-size: 0.82rem; font-weight: 500;
+      transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    }
+    nav.tabs button:hover { border-color: var(--accent); color: var(--accent); background: var(--primary-container); }
+    nav.tabs button.active {
+      background: var(--primary-container); border-color: var(--accent); color: #174ea6;
+    }
+    .panel { display: none; animation: fade 0.2s ease; }
+    .panel.active { display: block; }
+    @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+    .grid { display: grid; gap: 1rem; }
+    .grid.kpi { grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 0.75rem; }
+    .kpi-card {
+      position: relative;
+      overflow: hidden;
+      border-radius: 1rem;
+      padding: 0.95rem 1rem 0.85rem 1rem;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      box-shadow: 0 1px 2px rgba(60, 64, 67, 0.1), 0 2px 6px rgba(60, 64, 67, 0.06);
+    }
+    .kpi-card::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      border-radius: 1rem 0 0 1rem;
+      opacity: 0.95;
+    }
+    .kpi-card h3 {
+      margin: 0 0 0.35rem;
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-weight: 500;
+      color: var(--muted);
+    }
+    .kpi-card .kpi-val {
+      font-size: 1.5rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      line-height: 1.15;
+      letter-spacing: -0.02em;
+    }
+    .kpi-card .kpi-hint {
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin-top: 0.4rem;
+      line-height: 1.35;
+    }
+    .kpi-card--cyan::before { background: linear-gradient(180deg, #1a73e8, #174ea6); }
+    .kpi-card--cyan .kpi-val { color: #174ea6; }
+    .kpi-card--violet::before { background: linear-gradient(180deg, #9334e6, #7627bb); }
+    .kpi-card--violet .kpi-val { color: #7627bb; }
+    .kpi-card--emerald::before { background: linear-gradient(180deg, #1e8e3e, #137333); }
+    .kpi-card--emerald .kpi-val { color: #137333; }
+    .kpi-card--fuchsia::before { background: linear-gradient(180deg, #9334e6, #9c27b0); }
+    .kpi-card--fuchsia .kpi-val { color: #7b1fa2; }
+    .kpi-card--sky::before { background: linear-gradient(180deg, #4285f4, #1967d2); }
+    .kpi-card--sky .kpi-val { color: #1967d2; }
+    .kpi-card--amber::before { background: linear-gradient(180deg, #f9ab00, #f57c00); }
+    .kpi-card--amber .kpi-val { color: #e37400; }
+    .kpi-card--rose::before { background: linear-gradient(180deg, #ea4335, #c5221f); }
+    .kpi-card--rose .kpi-val { color: #c5221f; }
+    .kpi-card--teal::before { background: linear-gradient(180deg, #00897b, #00695c); }
+    .kpi-card--teal .kpi-val { color: #00695c; }
+    .kpi-card--indigo::before { background: linear-gradient(180deg, #5c6bc0, #3949ab); }
+    .kpi-card--indigo .kpi-val { color: #3949ab; }
+    .kpi-card--lime::before { background: linear-gradient(180deg, #7cb342, #558b2f); }
+    .kpi-card--lime .kpi-val { color: #33691e; }
+    .kpi-card--orange::before { background: linear-gradient(180deg, #fa903e, #e8710a); }
+    .kpi-card--orange .kpi-val { color: #e8710a; }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 1rem;
+      padding: 1rem 1.1rem;
+      box-shadow: 0 1px 2px rgba(60, 64, 67, 0.1), 0 1px 3px rgba(60, 64, 67, 0.08);
+    }
+    .card h3 { margin: 0 0 0.5rem; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+    .card .val { font-size: 1.55rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .card .hint { font-size: 0.75rem; color: var(--muted); margin-top: 0.35rem; }
+    .chart-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 1rem; margin: 1rem 0; }
+    .chart-box { height: clamp(200px, 28vh, 320px); position: relative; min-height: 200px; }
+    .banner-warn {
+      background: #fef7e0; border: 1px solid #fbc02d; color: #b06000;
+      padding: 0.85rem 1rem; border-radius: 0.5rem; margin-bottom: 1rem; font-size: 0.9rem;
+    }
+    .finding {
+      border-left: 3px solid var(--warn); padding: 0.5rem 0.75rem; margin: 0.4rem 0;
+      background: var(--surface); border-radius: 0 8px 8px 0; font-size: 0.88rem;
+    }
+    .finding.CRITICAL { border-left-color: var(--danger); }
+    .finding.HIGH { border-left-color: #fa903e; }
+    .finding.MEDIUM { border-left-color: var(--warn); }
+    .finding.LOW { border-left-color: var(--muted); }
+    table.data {
+      width: 100%; border-collapse: collapse; font-size: 0.8rem;
+    }
+    table.data th, table.data td {
+      border: 1px solid var(--border); padding: 0.45rem 0.55rem; text-align: left;
+    }
+    table.data th { background: #f1f3f4; color: var(--muted); font-weight: 500; }
+    table.data tr:nth-child(even) { background: #f8f9fa; }
+    .table-tools { margin: 0.5rem 0; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+    .table-tools input {
+      flex: 1; min-width: 200px; max-width: 420px; padding: 0.45rem 0.65rem;
+      border-radius: 0.5rem; border: 1px solid var(--border); background: var(--surface); color: var(--text);
+    }
+    .scroll { overflow-x: auto; max-height: min(520px, 50vh); overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; }
+    .matrix-wrap { overflow: auto; max-height: min(400px, 42vh); }
+    .matrix td { font-size: 0.72rem; padding: 0.25rem; text-align: center; min-width: 2.5rem; }
+    .sev-CRITICAL { color: var(--danger); font-weight: 700; }
+    .sev-HIGH { color: #e8710a; font-weight: 600; }
+    .sev-MEDIUM { color: var(--warn); }
+    .sev-LOW, .sev-INFO { color: var(--muted); }
+    footer {
+      flex-shrink: 0;
+      margin-top: auto;
+      padding-top: 1.25rem;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.75rem;
+    }
+    footer .report-legal {
+      margin-bottom: 1rem;
+      line-height: 1.5;
+    }
+    footer .report-dev {
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.72rem;
+      line-height: 1.5;
+      color: var(--muted);
+      text-align: center;
+    }
+    footer .report-dev strong {
+      color: var(--text);
+      font-weight: 500;
+    }
+    footer .report-dev a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    footer .report-dev a:hover {
+      text-decoration: underline;
+    }
+    .eks-note { color: var(--muted); font-size: 0.85rem; margin-bottom: 1rem; line-height: 1.45; }
+    #tbl-eks-hosts td:nth-child(2) { font-family: "Roboto Mono", ui-monospace, monospace; font-weight: 500; color: #174ea6; }
+    #tbl-eks-hosts td:nth-child(7) { white-space: pre-wrap; max-width: 340px; vertical-align: top; font-size: 0.74rem; line-height: 1.35; }
+    #tbl-eks-hosts td:nth-child(16) { white-space: pre-wrap; max-width: 260px; vertical-align: top; font-size: 0.72rem; }
+    .eks-host-count { font-size: 0.85rem; color: var(--muted); margin-bottom: 0.5rem; }
+    .purdue-stack { display: flex; flex-direction: column; gap: 6px; max-width: 520px; margin: 0.5rem 0 1rem; }
+    .purdue-bar {
+      padding: 0.5rem 0.75rem; border-radius: 8px; font-size: 0.8rem; border: 1px solid var(--border);
+      font-weight: 500;
+    }
+    .pb5 { background: #e8eaed; }
+    .pb4 { background: #d2e3fc; border-color: #aecbfa; }
+    .pb3 { background: #e8def8; border-color: #d0bcff; }
+    .pb2 { background: #ceead6; border-color: #81c995; }
+    .pb1 { background: #feefc3; border-color: #fdd663; }
+    .pb0 { background: #fce8e6; border-color: #f9ab9e; }
+    .seg-list { margin: 0.25rem 0 0 1.1rem; color: var(--text); font-size: 0.82rem; }
+    .seg-list li { margin: 0.35rem 0; }
+    .ref-list { font-size: 0.78rem; color: var(--muted); margin: 0.5rem 0 0 1.1rem; }
+    .audit-intro { font-size: 0.82rem; color: var(--muted); line-height: 1.5; margin-bottom: 0.75rem; }
+    .audit-index { font-weight: 800; color: var(--warn); font-variant-numeric: tabular-nums; }
+    #tbl-audit-findings td:nth-child(6), #tbl-audit-findings td:nth-child(7) {
+      max-width: 280px; white-space: pre-wrap; vertical-align: top; font-size: 0.74rem; line-height: 1.35;
+    }
+    .overview-drill { margin-bottom: 1rem; }
+    .overview-drill[hidden] { display: none !important; }
+    .overview-main[hidden] { display: none !important; }
+    .overview-drill-toolbar { margin-bottom: 0.75rem; }
+    .overview-back-btn {
+      display: inline-flex; align-items: center; gap: 0.35rem;
+      padding: 0.5rem 1rem; border-radius: 1.25rem; border: 1px solid var(--border);
+      background: var(--surface); color: var(--accent); font-size: 0.82rem; font-weight: 500;
+      cursor: pointer; font-family: inherit;
+      box-shadow: 0 1px 2px rgba(60, 64, 67, 0.1);
+    }
+    .overview-back-btn:hover { background: var(--primary-container); border-color: var(--accent); }
+    .overview-drill-title { margin: 0 0 0.75rem; font-size: 1.05rem; font-weight: 500; color: var(--text); }
+    .overview-drill-body .drill-note { color: var(--muted); font-size: 0.8rem; margin: 0 0 0.5rem; line-height: 1.45; }
+    .overview-drill-body .drill-scroll { max-height: min(520px, 55vh); margin-top: 0.35rem; }
+    .overview-drill-body .drill-section-title { font-size: 0.78rem; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin: 1rem 0 0.35rem; }
+    .kpi-card--click { cursor: pointer; transition: box-shadow 0.15s ease, border-color 0.15s ease; }
+    .kpi-card--click:hover {
+      border-color: var(--accent);
+      box-shadow: 0 2px 8px rgba(26, 115, 232, 0.18);
+    }
+    .kpi-card--click:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .kpi-card--click:focus:not(:focus-visible) { outline: none; }
+  </style>
+</head>
+<body>
+  <div id="luva-report-root" class="font-sans antialiased text-gray-900">
+  <div class="app-layout">
+  <div class="wrap flex-col">
+    <header>
+      <div>
+        <h1>Luva <span class="badge">passive PCAP assessment</span></h1>
+        <p class="sub">Read-only analysis suitable for OT/ICS reviews. Correlation and findings are heuristic — validate in scope and environment context.</p>
+      </div>
+      <div style="text-align:right;font-size:0.8rem;color:var(--muted);">
+        <div id="hdr-time"></div>
+      </div>
+    </header>
+
+    {% if metadata.read_errors or metadata.total_packets == 0 %}
+    <div class="banner-warn">
+      {% if metadata.read_errors %}Some inputs failed to read — open the <strong>Diagnostics</strong> tab.{% endif %}
+      {% if metadata.total_packets == 0 %}No packets processed.{% endif %}
+    </div>
+    {% endif %}
+
+    <nav class="tabs sticky-tabs" id="nav-tabs"></nav>
+
+    <main class="panel-stage">
+
+    <section class="panel active" data-tab="overview">
+      <div id="overview-drill" class="overview-drill" hidden>
+        <div class="overview-drill-toolbar">
+          <button type="button" id="overview-back-btn" class="overview-back-btn">← Back to Executive summary</button>
+        </div>
+        <h2 id="overview-drill-title" class="overview-drill-title"></h2>
+        <div id="overview-drill-body" class="overview-drill-body"></div>
+      </div>
+      <div id="overview-main" class="overview-main">
+      <div class="grid kpi" id="kpi-row"></div>
+      <div class="chart-row">
+        <div class="card chart-box"><canvas id="chartTimeline"></canvas></div>
+        <div class="card chart-box"><canvas id="chartProto"></canvas></div>
+        <div class="card chart-box"><canvas id="chartTcpPorts"></canvas></div>
+      </div>
+      <div class="card" style="margin-top:1rem;">
+        <h3>Passive findings (pentest lens)</h3>
+        <div id="findings-list"></div>
+      </div>
+      <div class="card" style="margin-top:1rem;">
+        <h3>Topology graph metrics</h3>
+        <div id="topology-mini"></div>
+      </div>
+      </div>
+    </section>
+
+    <section class="panel" data-tab="protocols">
+      <p class="audit-intro">L3/L4 mix, naming (DNS/HTTP), banners, OT-tagged cleartext, and credential/scanner hints — consolidated here (not repeated under Assessment).</p>
+      <div class="chart-row">
+        <div class="card chart-box"><canvas id="chartIpProto"></canvas></div>
+        <div class="card"><h3>TCP behaviour</h3><div id="tcp-behaviour"></div></div>
+      </div>
+      <div class="grid" style="grid-template-columns:1fr 1fr; gap:1rem;">
+        <div class="card"><h3>Top DNS names</h3><div class="scroll"><table class="data" id="tbl-dns"></table></div></div>
+        <div class="card"><h3>HTTP Host headers</h3><div class="scroll"><table class="data" id="tbl-http"></table></div></div>
+      </div>
+      <div class="card" style="margin-top:1rem;">
+        <h3>Cleartext / banner samples</h3>
+        <div class="scroll"><table class="data" id="tbl-banners"></table></div>
+      </div>
+      <div class="card" style="margin-top:1rem;">
+        <h3>OT-sensitive cleartext (heuristic)</h3>
+        <p style="color:var(--muted);font-size:0.78rem;line-height:1.45;margin:0 0 0.5rem;" id="ot-cleartext-note"></p>
+        <div class="scroll" style="max-height:min(440px,45vh);"><table class="data" id="tbl-ot-cleartext"></table></div>
+      </div>
+      <div class="card" style="margin-top:1rem;">
+        <h3>Credential hints &amp; scanner strings</h3>
+        <p style="color:var(--muted);font-size:0.76rem;margin:0 0 0.5rem;">From deep survey (HTTP/FTP-style samples and payload tool strings).</p>
+        <div class="scroll" style="max-height:min(220px,28vh);"><table class="data" id="tbl-exposure-creds"></table></div>
+        <p style="color:var(--muted);font-size:0.76rem;margin-top:0.5rem;" id="exposure-bcast-note"></p>
+      </div>
+    </section>
+
+    <section class="panel" data-tab="ot-comm">
+      <p class="audit-intro">ICS visibility, per-flow export, polling hints, packet matrix, and the interactive graph (no duplicate timeline / Modbus charts — those live under Executive and Assessment).</p>
+      <div class="card" style="margin-bottom:1rem;">
+        <h3>ICS / OT port visibility (packet-level)</h3>
+        <div class="scroll"><table class="data" id="tbl-ics-ports"></table></div>
+      </div>
+      <div class="table-tools">
+        <input type="search" id="filter-flows" placeholder="Filter flows (IP, port, protocol)…"/>
+        <span style="color:var(--muted);font-size:0.8rem;" id="flows-count"></span>
+      </div>
+      <div class="scroll">
+        <table class="data" id="tbl-flows"></table>
+      </div>
+      <div class="card" style="margin-top:1rem;">
+        <h3>Periodic / polling-like flows</h3>
+        <div class="scroll"><table class="data" id="tbl-periodic"></table></div>
+      </div>
+      <div class="card" style="margin-top:1rem;">
+        <h3>Communication matrix</h3>
+        <p style="color:var(--muted);font-size:0.85rem;margin:0 0 0.5rem;">Src IP → Dst IP packet counts (darker = more traffic).</p>
+        <div class="matrix-wrap card"><table class="matrix" id="tbl-matrix"></table></div>
+      </div>
+      {% include "baseline_soc_panel.html.j2" %}
+    </section>
+
+    <section class="panel" data-tab="assessment">
+      <h2 class="section-title">Audit &amp; integrity</h2>
+      <div class="card" style="margin-bottom:1rem;">
+        <h3>Chain of custody — capture integrity</h3>
+        <p class="audit-intro" id="audit-evidence-note"></p>
+        <div class="scroll" style="max-height:min(200px,22vh);">
+          <table class="data" id="tbl-evidence-hashes"></table>
+        </div>
+      </div>
+      <div class="card" style="margin-bottom:1rem;">
+        <h3>Assessment scope &amp; limitations</h3>
+        <p class="audit-intro" id="audit-scope-text"></p>
+        <ul id="audit-limits" style="font-size:0.82rem;margin:0.25rem 0 0 1.2rem;color:var(--text);"></ul>
+        <p style="margin-top:0.85rem;font-size:0.88rem;">
+          Passive exposure index (heuristic prioritization, <strong>not</strong> CVSS):
+          <span class="audit-index" id="audit-exposure-idx">0</span> / 100
+          <span style="color:var(--muted);font-size:0.76rem;display:block;margin-top:0.35rem;" id="audit-exposure-hint"></span>
+        </p>
+      </div>
+      <div class="card" style="margin-bottom:1rem;">
+        <h3>Structured audit findings</h3>
+        <p class="audit-intro">MITRE ATT&amp;CK mappings are passive-traffic heuristics — confirm with your threat model and architecture.</p>
+        <div class="scroll" style="max-height:min(520px,50vh);">
+          <table class="data" id="tbl-audit-findings"></table>
+        </div>
+      </div>
+      <div class="grid" style="grid-template-columns:1fr 1fr; gap:1rem;">
+        <div class="card">
+          <h3>High-value targets (risk-ranked)</h3>
+          <div class="scroll" style="max-height:min(300px,32vh);">
+            <table class="data" id="tbl-hvt-audit"></table>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Public IPv4 endpoints</h3>
+          <div class="scroll" style="max-height:min(300px,32vh);">
+            <table class="data" id="tbl-ext-assets"></table>
+          </div>
+        </div>
+      </div>
+      <p class="audit-intro" style="margin-top:1rem;">Write-surface flows are covered by <strong>OT &amp; comms</strong> (flows table, Writes column) and Modbus/S7 tables below — audit workbook still contains full JSON for automation.</p>
+
+      <h2 class="section-title" style="margin-top:1.5rem;">Threat patterns</h2>
+      <p style="color:var(--muted);font-size:0.82rem;line-height:1.5;margin:0 0 1rem;">
+        Passive heuristics — confirm in PCAP and with change control. Remote admin exposure is summarized by IT-style flow rows (SSH/RDP/SMB/…); asset-level port lists remain in JSON.
+      </p>
+      <div class="card" style="margin-bottom:1rem;">
+        <h3>Executive threat highlights</h3>
+        <div id="threat-exec-findings"></div>
+      </div>
+      <div class="grid" style="grid-template-columns:1fr 1fr; gap:1rem;">
+        <div class="card">
+          <h3>Modbus write operations (critical)</h3>
+          <p style="color:var(--muted);font-size:0.76rem;margin:0 0 0.5rem;">FC 5, 6, 15, 16 and related write-family codes.</p>
+          <div class="scroll" style="max-height:min(320px,34vh);"><table class="data" id="tbl-tp-modbus-writes"></table></div>
+        </div>
+        <div class="card">
+          <h3>S7 write / download / PLC control</h3>
+          <p style="color:var(--muted);font-size:0.76rem;margin:0 0 0.5rem;">Job Write (0x05), download block family, RUN/STOP class (0x28/0x29).</p>
+          <div class="scroll" style="max-height:min(320px,34vh);"><table class="data" id="tbl-tp-s7"></table></div>
+        </div>
+      </div>
+      <div class="grid" style="grid-template-columns:1fr 1fr; gap:1rem; margin-top:1rem;">
+        <div class="card">
+          <h3>IT protocols in capture (lateral movement context)</h3>
+          <p style="color:var(--muted);font-size:0.76rem;margin:0 0 0.5rem;">SMB, RDP, SSH, WinRM ports observed on flows.</p>
+          <div class="scroll" style="max-height:min(280px,30vh);"><table class="data" id="tbl-tp-it"></table></div>
+        </div>
+        <div class="card">
+          <h3>Multi-target OT access (enumeration hint)</h3>
+          <div class="scroll" style="max-height:min(280px,30vh);"><table class="data" id="tbl-tp-seq"></table></div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:1rem;">
+        <h3>Modbus reads — non-engineering role hypothesis</h3>
+        <div class="scroll" style="max-height:min(260px,28vh);"><table class="data" id="tbl-tp-unauth-read"></table></div>
+      </div>
+      <div class="grid" style="grid-template-columns:1fr 1fr; gap:1rem; margin-top:1rem;">
+        <div class="card">
+          <h3>Discovery &amp; scanning hints</h3>
+          <div id="threat-discovery"></div>
+        </div>
+        <div class="card">
+          <h3>Duplicate TCP payload fingerprints (replay hint)</h3>
+          <div class="scroll" style="max-height:min(220px,26vh);"><table class="data" id="tbl-tp-replay"></table></div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:1rem;">
+        <h3>Out of scope / limitations</h3>
+        <ul id="threat-limits" style="font-size:0.82rem;margin:0.25rem 0 0 1.2rem;color:var(--muted);line-height:1.45;"></ul>
+      </div>
+    </section>
+
+    <section class="panel" data-tab="inventory">
+      <p class="eks-note" id="eks-scope-note"></p>
+      <div class="card" style="margin-bottom:1rem;">
+        <h3 style="font-size:0.82rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); margin:0 0 0.35rem;">Detected hosts — per-IP inventory</h3>
+        <p style="color:var(--muted);font-size:0.78rem;margin:0 0 0.65rem;line-height:1.45;" id="eks-hosts-inv-note"></p>
+        <div class="table-tools">
+          <input type="search" id="filter-eks-hosts" placeholder="Filter: IP, MAC, hostname, role, vendor, EKS id, protocol, port…"/>
+        </div>
+        <div id="eks-hosts-count" class="eks-host-count"></div>
+        <div class="scroll" style="max-height:560px;">
+          <table class="data" id="tbl-eks-hosts"></table>
+        </div>
+      </div>
+      <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 1rem;">
+        <div class="card">
+          <h3>Purdue / ISA-95 levels (reference)</h3>
+          <p style="color:var(--muted);font-size:0.78rem;margin:0 0 0.5rem;">High-level enterprise-to-field model for OT segmentation discussions — not inferred from PCAP alone.</p>
+          <div class="purdue-stack" id="purdue-stack"></div>
+          <p style="color:var(--muted);font-size:0.78rem;" id="purdue-conduits"></p>
+        </div>
+        <div class="card">
+          <h3 id="seg-title"></h3>
+          <ul class="seg-list" id="seg-principles"></ul>
+          <h3 style="margin-top:1rem;font-size:0.78rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);">References</h3>
+          <ul class="ref-list" id="seg-refs"></ul>
+        </div>
+      </div>
+      <div class="card" style="margin-top:1rem;">
+        <h3>EKS / ICS component catalog</h3>
+        <p style="color:var(--muted);font-size:0.78rem;">Full logical component set; “observed” counts come from passive heuristics on this capture only.</p>
+        <div class="scroll" style="max-height:340px;">
+          <table class="data" id="tbl-eks-catalog"></table>
+        </div>
+      </div>
+      <div class="card" style="margin-top:1rem;">
+        <h3>Observed in this capture (aggregate)</h3>
+        <p style="color:var(--muted);font-size:0.76rem;margin:0 0 0.5rem;">Counts by EKS component id across all hosts — see the per-IP table above for each device’s address and tag mapping.</p>
+        <div id="eks-observed-summary" style="font-size:0.85rem;color:var(--muted);margin-bottom:0.75rem;"></div>
+        <div class="scroll" style="max-height:220px;">
+          <table class="data" id="tbl-eks-observed"></table>
+        </div>
+        <details style="margin-top:0.75rem;font-size:0.78rem;color:var(--muted);">
+          <summary>Catalog entries not matched to any host in this capture</summary>
+          <pre id="eks-not-observed" style="white-space:pre-wrap;margin:0.5rem 0;font-size:0.72rem;"></pre>
+        </details>
+      </div>
+      <div class="card" style="margin-top:1rem;">
+        <h3>Discovered assets (summary table)</h3>
+        <p style="color:var(--muted);font-size:0.78rem;margin:0 0 0.5rem;">Flattened endpoint view — EKS host rows above are authoritative for catalog mapping.</p>
+        <div class="table-tools">
+          <input type="search" id="filter-assets" placeholder="Filter assets…"/>
+        </div>
+        <div class="scroll" style="max-height:min(480px,45vh);">
+          <table class="data" id="tbl-assets"></table>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" data-tab="ot-assets">
+      <div class="card">
+        <h3>OT / ICS asset inventory</h3>
+        <p style="color:var(--muted);font-size:0.78rem;margin:0 0 0.65rem;line-height:1.45;">
+          Hosts with ICS parser labels, well-known ICS ports, field hints (Modbus unit id, S7 rack/slot, DNP3), or inferred OT roles. Same rows as the <code>ot_assets</code> CSV export.
+        </p>
+        <div class="table-tools">
+          <input type="search" id="filter-ot-assets" placeholder="Filter: IP, role, signals, protocols, ports…"/>
+        </div>
+        <div id="ot-assets-count" style="font-size:0.8rem;color:var(--muted);margin-bottom:0.5rem;"></div>
+        <div class="scroll" style="max-height:min(560px,50vh);">
+          <table class="data" id="tbl-ot-assets"></table>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" data-tab="anomalies">
+      <div class="scroll" style="max-height:min(640px,55vh);">
+        <table class="data" id="tbl-anomalies"></table>
+      </div>
+    </section>
+
+    <section class="panel" data-tab="diagnostics">
+      <div id="read-errors"></div>
+    </section>
+
+    </main>
+
+    <footer>
+      <div class="report-legal">
+        Luva {{ metadata.version or "" }} — AGPL-3.0 — Passive analysis only; no packets were injected or replayed.
+      </div>
+      <div class="report-dev">
+        <strong>Developer</strong> — Cuma KURT ·
+        <a href="mailto:cumakurt@gmail.com">cumakurt@gmail.com</a> ·
+        <a href="https://github.com/cumakurt/luva" target="_blank" rel="noopener noreferrer">GitHub</a> ·
+        <a href="https://www.linkedin.com/in/cuma-kurt-34414917/" target="_blank" rel="noopener noreferrer">LinkedIn</a> ·
+        <a href="https://www.gnu.org/licenses/agpl-3.0.html" target="_blank" rel="noopener noreferrer">GNU AGPL-3.0</a>
+      </div>
+    </footer>
+  </div>
+  </div>
+  </div>
+
+  <script type="application/json" id="luva-report-data">{{ report_json }}</script>
+  <script type="application/json" id="luva-baseline-embed-data">{{ baseline_embed_json }}</script>
+  {% if baseline_soc_js %}
+  <script>{{ baseline_soc_js | safe }}</script>
+  {% endif %}
+  <script>
+  (function() {
+    const raw = document.getElementById('luva-report-data').textContent;
+    const REPORT = JSON.parse(raw);
+    const meta = REPORT.metadata || {};
+    const sum = REPORT.summary || {};
+    const stats = REPORT.statistics || {};
+    const audit = stats.audit_workbook || {};
+    const deep = stats.deep_survey || {};
+    const pent = stats.pentest_insights || {};
+    const tp = stats.threat_patterns || {};
+    const assets = REPORT.assets || [];
+    const otAssets = REPORT.ot_assets || [];
+    const flows = REPORT.flows || [];
+    const anomalies = REPORT.anomalies || [];
+    const eks = REPORT.eks || {};
+
+    document.getElementById('hdr-time').textContent = meta.analysis_timestamp || '';
+
+    const tabs = [
+      { id: 'overview', label: 'Executive' },
+      { id: 'protocols', label: 'Protocols & exposure' },
+      { id: 'ot-comm', label: 'OT & comms' },
+      { id: 'assessment', label: 'Assessment' },
+      { id: 'inventory', label: 'Inventory (EKS)' },
+      { id: 'ot-assets', label: 'OT inventory' },
+      { id: 'anomalies', label: 'Anomalies' },
+      { id: 'diagnostics', label: 'Diagnostics' },
+    ];
+    const nav = document.getElementById('nav-tabs');
+    tabs.forEach(t => {
+      const b = document.createElement('button');
+      b.textContent = t.label;
+      b.dataset.tab = t.id;
+      if (t.id === 'overview') b.classList.add('active');
+      b.addEventListener('click', () => {
+        nav.querySelectorAll('button').forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+        document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.dataset.tab === t.id));
+        if (t.id !== 'overview') {
+          const om = document.getElementById('overview-main');
+          const od = document.getElementById('overview-drill');
+          if (om && od && !od.hidden) {
+            od.hidden = true;
+            om.hidden = false;
+          }
+        }
+        if (t.id === 'ot-comm' && typeof window.initLuvaBaselineSoc === 'function') {
+          window.initLuvaBaselineSoc();
+        }
+      });
+      nav.appendChild(b);
+    });
+
+    function kpi(label, val, hint, theme, drillId) {
+      const d = document.createElement('div');
+      d.className = 'kpi-card kpi-card--' + (theme || 'cyan') + (drillId ? ' kpi-card--click' : '');
+      if (drillId) {
+        d.setAttribute('data-drill', drillId);
+        d.setAttribute('role', 'button');
+        d.setAttribute('tabindex', '0');
+        d.setAttribute('aria-label', 'Show details: ' + label);
+      }
+      d.innerHTML = '<h3>' + label + '</h3><div class="kpi-val">' + val + '</div>' +
+        (hint ? '<div class="kpi-hint">' + hint + '</div>' : '');
+      return d;
+    }
+    const _L4_LABELS = { TCP: 1, UDP: 1, ICMP: 1, ICMPv6: 1, GRE: 1, SCTP: 1, IGMP: 1 };
+    function distinctOtProtocols(flows, protoDist) {
+      const seen = {};
+      const ordered = [];
+      function add(p) {
+        if (!p || typeof p !== 'string') return;
+        const t = p.trim();
+        if (!t || _L4_LABELS[t]) return;
+        if (!seen[t]) { seen[t] = 1; ordered.push(t); }
+      }
+      (flows || []).forEach(function (f) {
+        const arr = f.ics_protocols;
+        if (Array.isArray(arr) && arr.length) {
+          arr.forEach(add);
+          return;
+        }
+        if (f.ics_protocol) {
+          String(f.ics_protocol).split(',').forEach(function (x) { add(x); });
+        }
+      });
+      if (ordered.length === 0 && protoDist && typeof protoDist === 'object') {
+        Object.keys(protoDist).forEach(add);
+      }
+      return ordered;
+    }
+    const kpiRow = document.getElementById('kpi-row');
+    const cw = deep.capture_window || {};
+    const pd = stats.protocol_distribution || {};
+    const otProtos = distinctOtProtocols(flows, pd);
+    const otCount = otProtos.length;
+    let otHint = 'ICS / OT parser labels in flows';
+    if (otProtos.length) {
+      otHint = otProtos.length <= 4
+        ? otProtos.join(', ')
+        : otProtos.slice(0, 3).join(', ') + ' +' + (otProtos.length - 3) + ' more';
+    } else {
+      otHint = 'No ICS-tagged protocols (only L4 / generic traffic)';
+    }
+    kpiRow.appendChild(kpi('Packets', (meta.total_packets ?? 0).toLocaleString(), cw.span_seconds ? 'span ' + cw.span_seconds + 's' : '', 'cyan', 'packets'));
+    kpiRow.appendChild(kpi('Unique hosts', (deep.uniques ? (deep.uniques.src_ipv4 + deep.uniques.dst_ipv4) : '—'), 'src/dst IPv4 sets', 'violet', 'unique_hosts'));
+    kpiRow.appendChild(kpi('Flows', (sum.flows_analyzed ?? 0).toLocaleString(), '5-tuple tracked', 'emerald', 'flows'));
+    kpiRow.appendChild(kpi('OT protocols', String(otCount), otHint, 'fuchsia', 'ot_protocols'));
+    kpiRow.appendChild(kpi('Assets', (sum.assets_discovered ?? 0).toLocaleString(), 'discovered endpoints', 'sky', 'assets'));
+    kpiRow.appendChild(kpi('OT assets', (sum.ot_assets_discovered ?? 0).toLocaleString(), 'ICS-relevant subset', 'emerald', 'ot_assets'));
+    kpiRow.appendChild(kpi('Anomalies', (sum.anomalies_detected ?? 0).toLocaleString(), 'rule engine', 'amber', 'anomalies'));
+    kpiRow.appendChild(kpi('Critical', sum.critical_anomalies ?? 0, 'severity', 'rose', 'critical'));
+
+    const fs = stats.flow_stats || {};
+    const ast = stats.asset_stats || {};
+    const obs = eks.observed || {};
+    const sct = tp.summary_counts || {};
+    const auditFindings = audit.findings || [];
+    const periodicFlows = stats.periodic_flows || [];
+    const topGS = (REPORT.topology && REPORT.topology.graph_stats) || {};
+
+    function humanBytes(n) {
+      if (n == null || n === undefined || (typeof n === 'number' && isNaN(n))) return '—';
+      var x = Number(n);
+      if (x < 0 || !isFinite(x)) return '—';
+      if (x < 1024) return String(Math.round(x)) + ' B';
+      if (x < 1048576) return (x / 1024).toFixed(x < 10240 ? 1 : 0) + ' KiB';
+      if (x < 1073741824) return (x / 1048576).toFixed(x < 10485760 ? 2 : 1) + ' MiB';
+      return (x / 1073741824).toFixed(2) + ' GiB';
+    }
+
+    kpiRow.appendChild(kpi('Run time', meta.duration_seconds != null ? Number(meta.duration_seconds).toFixed(2) + ' s' : '—', 'pipeline wall clock', 'indigo', 'runtime'));
+    kpiRow.appendChild(kpi('Inputs', String((meta.input_files || []).length), 'PCAP / input files', 'teal', 'inputs'));
+    kpiRow.appendChild(kpi('Flow bytes', humanBytes(fs.total_bytes), 'summed over flows', 'cyan', 'flow_bytes'));
+    kpiRow.appendChild(kpi('ICS flows', (fs.ics_flows != null ? Number(fs.ics_flows) : 0).toLocaleString(), 'parser-tagged flows', 'fuchsia', 'ics_flows'));
+    kpiRow.appendChild(kpi('Write flows', (fs.write_operation_flows != null ? Number(fs.write_operation_flows) : 0).toLocaleString(), 'write ops in flow set', 'rose', 'write_flows'));
+    kpiRow.appendChild(kpi('Exc. flows', (fs.flows_with_exceptions != null ? Number(fs.flows_with_exceptions) : 0).toLocaleString(), 'protocol / Modbus exceptions', 'amber', 'exc_flows'));
+    kpiRow.appendChild(kpi('Risk assets', (ast.assets_with_risk != null ? Number(ast.assets_with_risk) : 0).toLocaleString(), 'risk score &gt; 0', 'orange', 'risk_assets'));
+    kpiRow.appendChild(kpi('EKS tagged', (obs.assets_with_tags != null ? Number(obs.assets_with_tags) : 0).toLocaleString(), 'hosts with catalog tags', 'sky', 'eks_tagged'));
+    kpiRow.appendChild(kpi('Audit rows', auditFindings.length.toLocaleString(), 'workbook-style findings', 'violet', 'audit_rows'));
+    var patMw = sct.modbus_write_flows != null ? Number(sct.modbus_write_flows) : 0;
+    var patS7n = sct.s7_critical_flows != null ? Number(sct.s7_critical_flows) : 0;
+    var patItr = sct.it_remote_protocol_flows != null ? Number(sct.it_remote_protocol_flows) : 0;
+    var patTotal = patMw + patS7n + patItr;
+    var patHint = 'Modbus write ' + patMw + ', S7 crit. ' + patS7n + ', IT/OT ' + patItr;
+    kpiRow.appendChild(kpi('Pattern flows', patTotal.toLocaleString(), patHint, 'teal', 'pattern_flows'));
+    kpiRow.appendChild(kpi('Avg pps', cw.avg_packets_per_second != null ? String(cw.avg_packets_per_second) : '—', 'capture window average', 'lime', 'avg_pps'));
+    kpiRow.appendChild(kpi('Periodic', periodicFlows.length.toLocaleString(), 'stable-interval flow candidates', 'indigo', 'periodic'));
+    kpiRow.appendChild(kpi('Graph nodes', (topGS.total_nodes != null ? Number(topGS.total_nodes) : 0).toLocaleString(), 'topology communication graph', 'cyan', 'graph_nodes'));
+
+    const findingsEl = document.getElementById('findings-list');
+    (pent.passive_findings || []).forEach(f => {
+      const d = document.createElement('div');
+      d.className = 'finding ' + (f.severity || '');
+      d.innerHTML = '<strong>' + (f.title || '') + '</strong> — ' + (f.detail || '');
+      findingsEl.appendChild(d);
+    });
+    if (!pent.passive_findings || !pent.passive_findings.length) {
+      findingsEl.innerHTML = '<p style="color:var(--muted)">No automated passive findings beyond baseline visibility.</p>';
+    }
+
+    const gs = (REPORT.topology && REPORT.topology.graph_stats) || null;
+    document.getElementById('topology-mini').innerHTML = gs
+      ? '<table class="data"><tr><th>Nodes</th><td>' + (gs.total_nodes ?? '—') + '</td></tr><tr><th>Edges</th><td>' + (gs.total_edges ?? '—')
+      + '</td></tr><tr><th>Density</th><td>' + (gs.density ?? '—') + '</td></tr><tr><th>Weakly connected</th><td>' + (gs.is_connected ?? '—') + '</td></tr></table>'
+      : '<p style="color:var(--muted)">No topology statistics.</p>';
+
+    const ChartCfg = { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#5f6368' } } },
+      scales: { x: { ticks: { color: '#5f6368', maxRotation: 45 }, grid: { color: 'rgba(95,99,104,0.12)' } },
+                y: { ticks: { color: '#5f6368' }, grid: { color: 'rgba(95,99,104,0.12)' } } } };
+
+    const tl = deep.timeline || {};
+    if (tl.labels && tl.labels.length) {
+      new Chart(document.getElementById('chartTimeline'), {
+        type: 'line',
+        data: { labels: tl.labels, datasets: [{ label: 'Packets / bin', data: tl.packets, borderColor: '#1a73e8', backgroundColor: 'rgba(26,115,232,0.12)', fill: true, tension: 0.2 }] },
+        options: ChartCfg
+      });
+    }
+
+    const pLabels = Object.keys(pd);
+    const pVals = Object.values(pd);
+    if (pLabels.length) {
+      new Chart(document.getElementById('chartProto'), {
+        type: 'doughnut',
+        data: { labels: pLabels, datasets: [{ data: pVals, backgroundColor: ['#1a73e8','#9334e6','#1e8e3e','#fa903e','#ea4335','#5f6368','#f9ab00'] }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { color: '#5f6368' } } } }
+      });
+    }
+
+    const topTcp = (deep.top_destination_tcp_ports || []).slice(0, 12);
+    if (topTcp.length) {
+      new Chart(document.getElementById('chartTcpPorts'), {
+        type: 'bar',
+        data: { labels: topTcp.map(r => String(r.port)), datasets: [{ label: 'Packets', data: topTcp.map(r => r.packets), backgroundColor: topTcp.map(r => r.ics ? 'rgba(147,52,230,0.45)' : 'rgba(95,99,104,0.35)') }] },
+        options: ChartCfg
+      });
+    }
+
+    const ipProto = deep.ip_protocols || {};
+    const ipL = Object.keys(ipProto);
+    if (ipL.length) {
+      new Chart(document.getElementById('chartIpProto'), {
+        type: 'pie',
+        data: { labels: ipL, datasets: [{ data: ipL.map(k => ipProto[k]), backgroundColor: ['#1a73e8','#1e8e3e','#fa903e','#9334e6','#ea4335','#5f6368'] }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#5f6368' } } } }
+      });
+    }
+
+    const tb = deep.tcp_behavior || {};
+    document.getElementById('tcp-behaviour').innerHTML =
+      '<table class="data"><tr><th>SYN (no ACK)</th><td>' + (tb.syn_without_ack_segments||0) + '</td></tr>' +
+      '<tr><th>RST</th><td>' + (tb.rst_segments||0) + '</td></tr><tr><th>FIN</th><td>' + (tb.fin_segments||0) + '</td></tr>' +
+      '<tr><th>TCP w/ payload</th><td>' + (tb.segments_with_payload||0) + '</td></tr></table>';
+
+    function escCell(s) {
+      if (s == null || s === undefined) return '';
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+    function fillTable(id, headers, rows) {
+      const t = document.getElementById(id);
+      if (!t) return;
+      t.innerHTML = '<thead><tr>' + headers.map(h => '<th>' + escCell(h) + '</th>').join('') + '</tr></thead><tbody>' +
+        rows.map(cells => '<tr>' + cells.map(c => '<td>' + c + '</td>').join('') + '</tr>').join('') + '</tbody>';
+    }
+    fillTable('tbl-dns', ['Name', 'Count'], (deep.dns_qnames_top || []).map(r => [r.name, r.count]));
+    fillTable('tbl-http', ['Host', 'Count'], (deep.http_hosts_top || []).map(r => [r.host, r.count]));
+    fillTable('tbl-banners', ['Protocol', 'Sample'], (deep.banner_samples || []).map(r => [r.protocol, (r.sample || '').replace(/</g,'&lt;')]));
+    const cot = deep.cleartext_ot_sensitive || {};
+    document.getElementById('ot-cleartext-note').textContent =
+      (cot.note || '') + (cot.hits_by_category && Object.keys(cot.hits_by_category).length
+        ? ' Hits by category: ' + Object.entries(cot.hits_by_category).map(([k, v]) => k + '=' + v).join(', ')
+        : '');
+    const ots = cot.samples || [];
+    if (!ots.length) {
+      fillTable('tbl-ot-cleartext', ['Note'], [['No OT-specific cleartext samples matched heuristics (or capture has no matching payloads).']]);
+    } else {
+      fillTable('tbl-ot-cleartext',
+        ['Sensitivity', 'Category', 'Src', 'Dst', 'Ports', 'Summary', 'Preview / excerpt'],
+        ots.map(r => [
+          escCell(r.sensitivity),
+          escCell(r.category),
+          escCell(r.src_ip),
+          escCell(r.dst_ip),
+          escCell(String(r.src_port) + '→' + String(r.dst_port)),
+          escCell(r.summary),
+          '<code style="font-size:0.68rem;word-break:break-all;white-space:pre-wrap">' +
+            escCell(r.http_context_excerpt || r.snmp_community_redacted || r.evidence_preview_hex || '—') +
+            '</code>'
+        ]));
+    }
+    fillTable('tbl-ics-ports', ['Side', 'Port', 'Service', 'Packets', 'Risk'],
+      (deep.ics_port_visibility || []).map(r => [r.observation, r.port, r.label, r.packets, r.risk]));
+
+    function renderFlows(filter) {
+      const f = (filter || '').toLowerCase();
+      const rows = flows.filter(fl => {
+        if (!f) return true;
+        const s = JSON.stringify(fl).toLowerCase();
+        return s.includes(f);
+      });
+      document.getElementById('flows-count').textContent = rows.length + ' / ' + flows.length + ' flows';
+      fillTable('tbl-flows',
+        ['Src', 'Dst', 'Ports', 'Trans', 'ICS', 'Pkts', 'Bytes', 'Writes', 'Modbus write FCs', 'S7 svc', 'Exc', 'Fn codes'],
+        rows.map(fl => [
+          fl.src_ip, fl.dst_ip, fl.src_port + '→' + fl.dst_port, fl.transport_protocol,
+          fl.ics_protocol || '—', fl.packet_count, fl.byte_count,
+          fl.has_write_operations ? 'yes' : '',
+          (fl.modbus_write_fcs_seen || []).length ? (fl.modbus_write_fcs_seen || []).join(',') : '—',
+          (fl.s7_service_codes_seen || []).length ? (fl.s7_service_codes_seen || []).map(function (x) { return '0x' + Number(x).toString(16); }).join(',') : '—',
+          fl.exception_count,
+          (fl.function_codes_seen || []).join(',')
+        ]));
+    }
+    renderFlows('');
+    document.getElementById('filter-flows').addEventListener('input', e => renderFlows(e.target.value));
+
+    const per = stats.periodic_flows || [];
+    fillTable('tbl-periodic', ['Src', 'Dst', 'Protocol', 'Period s', 'CV', 'Pkts'],
+      per.map(p => [p.src_ip, p.dst_ip, p.protocol, p.period_seconds, p.cv, p.packet_count]));
+
+    function renderAssets(filter) {
+      const f = (filter || '').toLowerCase();
+      const rows = assets.filter(a => !f || JSON.stringify(a).toLowerCase().includes(f));
+      fillTable('tbl-assets',
+        ['IP', 'Role', 'EKS tags', 'MAC', 'Vendor', 'Protocols', 'Ports', 'Pkts', 'Bytes', 'Out conns', 'In conns', 'Risk'],
+        rows.map(a => [
+          a.ip_address, a.role, (a.eks_components||[]).join(', '), a.mac_address || '', a.vendor || '',
+          (a.protocols_seen||[]).join(', '), (a.open_ports||[]).slice(0,8).join(',') + ((a.open_ports||[]).length>8?'…':''),
+          a.packet_count, a.bytes_total, a.initiated_connections, a.received_connections, a.risk_score
+        ]));
+    }
+    renderAssets('');
+    document.getElementById('filter-assets').addEventListener('input', e => renderAssets(e.target.value));
+
+    function renderOtAssets(filter) {
+      const f = (filter || '').toLowerCase();
+      const rows = otAssets.filter(a => !f || JSON.stringify(a).toLowerCase().includes(f));
+      const cnt = document.getElementById('ot-assets-count');
+      if (cnt) cnt.textContent = rows.length + ' / ' + otAssets.length + ' OT-classified hosts';
+      fillTable('tbl-ot-assets',
+        ['IP', 'Role', 'OT signals', 'EKS tags', 'MAC', 'Vendor', 'Protocols', 'Ports', 'Pkts', 'Bytes', 'Out conns', 'In conns', 'Risk'],
+        rows.map(a => [
+          escCell(a.ip_address),
+          escCell(a.role),
+          escCell(a.ot_signals_summary || (Array.isArray(a.ot_signals) ? a.ot_signals.join('; ') : '')),
+          escCell((a.eks_components || []).join(', ')),
+          escCell(a.mac_address || ''),
+          escCell(a.vendor || ''),
+          escCell((a.protocols_seen || []).join(', ')),
+          escCell((a.open_ports || []).slice(0, 12).join(',') + ((a.open_ports || []).length > 12 ? '…' : '')),
+          escCell(a.packet_count),
+          escCell(a.bytes_total),
+          escCell(a.initiated_connections),
+          escCell(a.received_connections),
+          escCell(a.risk_score)
+        ]));
+    }
+    renderOtAssets('');
+    const fot = document.getElementById('filter-ot-assets');
+    if (fot) fot.addEventListener('input', e => renderOtAssets(e.target.value));
+
+    const matrix = stats.communication_matrix || {};
+    const srcs = Object.keys(matrix).sort();
+    const dstSet = new Set();
+    srcs.forEach(s => Object.keys(matrix[s]).forEach(d => dstSet.add(d)));
+    const dsts = Array.from(dstSet).sort().slice(0, 40);
+    if (!srcs.length || !dsts.length) {
+      document.getElementById('tbl-matrix').innerHTML =
+        '<tr><td style="color:var(--muted);padding:1rem;">No IPv4 flow pairs to plot (empty capture or non-IP traffic).</td></tr>';
+    } else {
+      let maxV = 1;
+      srcs.slice(0, 35).forEach(s => dsts.forEach(d => {
+        const v = (matrix[s] && matrix[s][d]) || 0;
+        if (v > maxV) maxV = v;
+      }));
+      let mh = '<tr><th></th>' + dsts.map(d => '<th title="'+d+'">' + d.split('.').slice(-1)[0] + '</th>').join('') + '</tr>';
+      srcs.slice(0, 35).forEach(s => {
+        mh += '<tr><th style="text-align:left;max-width:120px;overflow:hidden" title="'+s+'">' + s + '</th>';
+        dsts.forEach(d => {
+          const v = (matrix[s] && matrix[s][d]) || 0;
+          const op = v ? Math.min(0.35 + (v / maxV) * 0.65, 1) : 0;
+          const bg = v ? 'rgba(26,115,232,' + op + ')' : 'transparent';
+          mh += '<td style="background:' + bg + '">' + (v || '') + '</td>';
+        });
+        mh += '</tr>';
+      });
+      document.getElementById('tbl-matrix').innerHTML = mh;
+    }
+
+    fillTable('tbl-anomalies',
+      ['ID', 'Sev', 'Category', 'Rule', 'Description'],
+      anomalies.map(e => [
+        e.event_id,
+        '<span class="sev-' + e.severity + '">' + e.severity + '</span>',
+        e.category, e.rule_id, (e.description || '').replace(/</g,'&lt;')
+      ]));
+
+    document.getElementById('audit-evidence-note').textContent = meta.evidence_integrity_note || '';
+    const evRows = meta.input_evidence || [];
+    if (!evRows.length) {
+      fillTable('tbl-evidence-hashes', ['Note'], [['No input hash metadata (re-run with current analyzer).']]);
+    } else {
+      fillTable('tbl-evidence-hashes', ['File', 'Size (bytes)', 'SHA-256'],
+        evRows.map(r => [
+          escCell(r.filename || r.path || ''),
+          escCell(String(r.size_bytes != null ? r.size_bytes : '')),
+          '<code style="font-size:0.66rem;word-break:break-all">' + escCell(r.sha256 || '') + '</code>'
+        ]));
+    }
+    document.getElementById('audit-scope-text').textContent = audit.scope_statement || '';
+    document.getElementById('audit-limits').innerHTML =
+      (audit.limitations || []).map(l => '<li>' + escCell(l) + '</li>').join('');
+    document.getElementById('audit-exposure-idx').textContent = String(audit.passive_exposure_index != null ? audit.passive_exposure_index : 0);
+    document.getElementById('audit-exposure-hint').textContent = audit.passive_exposure_note || '';
+
+    function mitreAuditLinks(refs) {
+      if (!refs || !refs.length) return '—';
+      return refs.map(m => {
+        const id = escCell(m.id || '');
+        const name = escCell(m.name || '');
+        const u = m.url;
+        if (u) return '<a href="' + escCell(u) + '" target="_blank" rel="noopener noreferrer">' + id + '</a> ' + name;
+        return id + ' ' + name;
+      }).join('<br/>');
+    }
+    const af = audit.findings || [];
+    if (!af.length) {
+      fillTable('tbl-audit-findings', ['Note'], [['No structured workbook findings for this capture.']]);
+    } else {
+      fillTable('tbl-audit-findings',
+        ['ID', 'Sev', 'Category', 'Title', 'Narrative', 'Evidence', 'MITRE', 'Remediation', 'Standards'],
+        af.map(f => [
+          escCell(f.finding_id),
+          '<span class="sev-' + escCell(f.severity || '') + '">' + escCell(f.severity) + '</span>',
+          escCell(f.category),
+          escCell(f.title),
+          escCell(f.narrative || ''),
+          escCell(f.evidence_summary || ''),
+          mitreAuditLinks(f.mitre_attack_references),
+          escCell(f.remediation || ''),
+          escCell(Array.isArray(f.standards_refs) ? f.standards_refs.join('; ') : String(f.standards_refs || ''))
+        ]));
+    }
+
+    const hvt = (audit.pentest_cross_reference && audit.pentest_cross_reference.high_value_targets) || [];
+    if (!hvt.length) {
+      fillTable('tbl-hvt-audit', ['Note'], [['No high-value targets in ranked list for this capture.']]);
+    } else {
+      fillTable('tbl-hvt-audit',
+        ['IP', 'Risk', 'Role', 'Protocols', 'Risk factors'],
+        hvt.map(h => [
+          escCell(h.ip),
+          escCell(h.risk_score),
+          escCell(h.role),
+          escCell((h.protocols || []).join(', ')),
+          escCell((h.risk_factors || []).join('; '))
+        ]));
+    }
+
+    const extA = audit.external_facing_assets || [];
+    if (!extA.length) {
+      fillTable('tbl-ext-assets', ['Note'], [['No public IPv4 assets in this inventory.']]);
+    } else {
+      fillTable('tbl-ext-assets',
+        ['IP', 'Role', 'Risk', 'Protocols'],
+        extA.map(a => [
+          escCell(a.ip_address),
+          escCell(a.role),
+          escCell(a.risk_score),
+          escCell((a.protocols_seen || []).join(', '))
+        ]));
+    }
+
+    const tef = tp.executive_findings || [];
+    const thExecEl = document.getElementById('threat-exec-findings');
+    if (!tef.length) {
+      thExecEl.innerHTML = '<p style="color:var(--muted)">No executive threat-pattern highlights for this capture.</p>';
+    } else {
+      thExecEl.innerHTML = tef.map(f =>
+        '<div class="finding ' + (f.severity || '') + '"><strong>' + escCell(f.title) + '</strong> — ' + escCell(f.detail) + '</div>'
+      ).join('');
+    }
+
+    const mbw = tp.modbus_write_flows || [];
+    if (!mbw.length) {
+      fillTable('tbl-tp-modbus-writes', ['Note'], [['No Modbus write-family flows identified by parsers in this capture.']]);
+    } else {
+      fillTable('tbl-tp-modbus-writes',
+        ['Src', 'Dst', 'Ports', 'Write FCs', 'Detail', 'Pkts'],
+        mbw.map(r => [
+          escCell(r.src_ip), escCell(r.dst_ip),
+          escCell(String(r.src_port) + '→' + String(r.dst_port)),
+          escCell((r.write_function_codes || []).join(', ')),
+          escCell(r.interpretation),
+          escCell(r.packet_count)
+        ]));
+    }
+
+    const s7c = tp.s7_critical_flows || [];
+    if (!s7c.length) {
+      fillTable('tbl-tp-s7', ['Note'], [['No S7 write/download/PLC-control flows identified.']]);
+    } else {
+      fillTable('tbl-tp-s7',
+        ['Src', 'Dst', 'Ports', 'S7 codes', 'Detail', 'Pkts'],
+        s7c.map(r => [
+          escCell(r.src_ip), escCell(r.dst_ip),
+          escCell(String(r.src_port) + '→' + String(r.dst_port)),
+          escCell((r.s7_service_codes_hex || []).join(', ')),
+          escCell(r.interpretation),
+          escCell(r.packet_count)
+        ]));
+    }
+
+    const itp = tp.it_remote_protocol_flows || [];
+    if (!itp.length) {
+      fillTable('tbl-tp-it', ['Note'], [['No SMB/RDP/SSH/WinRM-class port flows in this capture.']]);
+    } else {
+      fillTable('tbl-tp-it',
+        ['Service (guess)', 'Port', 'Src', 'Dst', 'Trans', 'Pkts'],
+        itp.map(r => [
+          escCell(r.service_guess), escCell(r.port),
+          escCell(r.src_ip), escCell(r.dst_ip),
+          escCell(r.transport), escCell(r.packet_count)
+        ]));
+    }
+
+    const seq = tp.sequential_ics_access_hints || [];
+    if (!seq.length) {
+      fillTable('tbl-tp-seq', ['Note'], [['No single source with ≥4 distinct OT peers on ICS ports.']]);
+    } else {
+      fillTable('tbl-tp-seq',
+        ['Src IP', 'OT peers', 'Role guess', 'Sample destinations', 'Note'],
+        seq.map(r => [
+          escCell(r.src_ip),
+          escCell(r.unique_ics_peer_count),
+          escCell(r.asset_role_guess),
+          escCell((r.sample_destinations || []).join(', ')),
+          escCell(r.note)
+        ]));
+    }
+
+    const ur = tp.modbus_read_non_engineering_hints || [];
+    if (!ur.length) {
+      fillTable('tbl-tp-unauth-read', ['Note'], [['No Modbus read flows from non-engineering-tagged sources matched heuristics.']]);
+    } else {
+      fillTable('tbl-tp-unauth-read',
+        ['Src', 'Dst', 'Port', 'FCs seen', 'Role guess', 'Pkts', 'Note'],
+        ur.map(r => [
+          escCell(r.src_ip), escCell(r.dst_ip), escCell(r.dst_port),
+          escCell((r.function_codes_seen || []).join(', ')),
+          escCell(r.asset_role_guess),
+          escCell(r.packet_count),
+          escCell(r.note)
+        ]));
+    }
+
+    const disc = tp.discovery_and_scanning || {};
+    const scanHits = disc.scanner_tool_string_hits || {};
+    document.getElementById('threat-discovery').innerHTML =
+      '<table class="data">' +
+      '<tr><th>TCP SYN (no ACK) segments</th><td>' + escCell(String(disc.tcp_syn_without_ack_segments || 0)) + '</td></tr>' +
+      '<tr><th>SYN / TCP-payload segment ratio</th><td>' + escCell(String(disc.syn_to_tcp_payload_ratio || 0)) + '</td></tr>' +
+      '<tr><th>Scanner-like payload strings</th><td>' + escCell(JSON.stringify(scanHits)) + '</td></tr>' +
+      '</table><p style="color:var(--muted);font-size:0.76rem;margin-top:0.5rem;">' + escCell(disc.notes || '') + '</p>';
+
+    const rfb = (tp.replay_and_duplicate_payloads || {}).repeated_fingerprint_buckets || [];
+    if (!rfb.length) {
+      fillTable('tbl-tp-replay', ['Note'], [['No repeated 48-byte TCP payload fingerprints (≥4 hits).']]);
+    } else {
+      fillTable('tbl-tp-replay', ['MD5 (48 B prefix)', 'Occurrences'],
+        rfb.map(x => [escCell(x.fingerprint_md5_first_48b), escCell(x.occurrences)]));
+    }
+
+    const thHints = deep.threat_hints || {};
+    const creds = thHints.credential_exposure_samples || [];
+    const scanS = thHints.scanner_tool_string_hits || {};
+    const credRows = [];
+    creds.forEach(c => credRows.push([escCell(c.type), escCell(c.credential_hint_excerpt || '')]));
+    Object.keys(scanS).forEach(k => credRows.push(['scanner_string', escCell(k + ': ' + String(scanS[k]))]));
+    if (!credRows.length) {
+      fillTable('tbl-exposure-creds', ['Note'], [['No HTTP Basic / FTP USER samples or scanner string hits in deep_survey.']]);
+    } else {
+      fillTable('tbl-exposure-creds', ['Type', 'Excerpt / hit'], credRows);
+    }
+
+    const cb = tp.credential_and_broadcast || {};
+    let bcastTxt = 'ARP frames (L2): ' + (thHints.arp_frames_observed != null ? thHints.arp_frames_observed : '—');
+    bcastTxt += ' · IPv4 broadcast dest packets: ' + (thHints.ipv4_broadcast_dest_packets != null ? thHints.ipv4_broadcast_dest_packets : '—');
+    if (cb.broadcast_storm_note) bcastTxt += '. ' + cb.broadcast_storm_note;
+    document.getElementById('exposure-bcast-note').textContent = bcastTxt;
+
+    document.getElementById('threat-limits').innerHTML = (tp.limitations || [])
+      .map(l => '<li>' + escCell(l) + '</li>').join('');
+
+    const re = meta.read_errors || [];
+    document.getElementById('read-errors').innerHTML = re.length
+      ? '<ul>' + re.map(e => '<li><code>' + e.path + '</code> — ' + e.detail + '</li>').join('') + '</ul>'
+      : '<p style="color:var(--muted)">No read errors.</p>';
+
+    document.getElementById('eks-scope-note').textContent = eks.scope_note || '';
+    document.getElementById('eks-hosts-inv-note').textContent = eks.hosts_inventory_note || '';
+
+    const inv = eks.hosts_inventory || [];
+    function formatEksPartners(h) {
+      const p = h.communication_partners || [];
+      if (!p.length) return '—';
+      const maxN = 16;
+      const show = p.slice(0, maxN);
+      let s = show.join(', ');
+      if (p.length > maxN) s += ' … (+' + (p.length - maxN) + ' more)';
+      return s;
+    }
+    function formatIcsHints(h) {
+      const bits = [];
+      if (h.plc_rack != null || h.plc_slot != null) {
+        bits.push('S7 rack/slot ' + (h.plc_rack != null ? h.plc_rack : '—') + '/' + (h.plc_slot != null ? h.plc_slot : '—'));
+      }
+      if (h.modbus_unit_ids && h.modbus_unit_ids.length) {
+        bits.push('Modbus unit ID(s) ' + h.modbus_unit_ids.join(', '));
+      }
+      if (h.dnp3_address != null) bits.push('DNP3 address ' + h.dnp3_address);
+      return bits.length ? bits.join(' · ') : '—';
+    }
+    function renderEksHosts(filter) {
+      const f = (filter || '').toLowerCase();
+      const rows = !f ? inv : inv.filter(h => JSON.stringify(h).toLowerCase().includes(f));
+      document.getElementById('eks-hosts-count').textContent =
+        rows.length + ' host row(s) match filter · ' + inv.length + ' total discovered in capture';
+      const headers = [
+        '#', 'IPv4 address', 'Hostname', 'MAC address', 'Inferred role', 'Vendor',
+        'EKS component mapping (id — catalog name)', 'Protocols seen', 'Open ports',
+        'First seen (UTC)', 'Last seen (UTC)', 'Packets', 'Bytes', 'Outbound sessions', 'Inbound sessions',
+        'Peer IP addresses', 'Peer count', 'Risk score', 'Risk factors',
+        'ICS field hints', 'Firmware hints'
+      ];
+      fillTable('tbl-eks-hosts', headers, rows.map((h, idx) => {
+        const eksLines = (h.eks_tags_detailed || []).length
+          ? (h.eks_tags_detailed || []).map(t => escCell(t)).join('\n')
+          : escCell('— (no EKS component tag inferred for this host)');
+        return [
+          String(idx + 1),
+          escCell(h.ip_address),
+          escCell(h.hostname || '—'),
+          escCell(h.mac_address || '—'),
+          escCell(h.role || '—'),
+          escCell(h.vendor || '—'),
+          eksLines,
+          escCell((h.protocols_seen || []).join(', ') || '—'),
+          escCell((h.open_ports || []).join(', ') || '—'),
+          escCell(h.first_seen || '—'),
+          escCell(h.last_seen || '—'),
+          escCell(h.packet_count),
+          escCell(h.bytes_total),
+          escCell(h.initiated_connections),
+          escCell(h.received_connections),
+          escCell(formatEksPartners(h)),
+          escCell(h.communication_partners_count),
+          escCell(h.risk_score),
+          escCell((h.risk_factors || []).join('; ') || '—'),
+          escCell(formatIcsHints(h)),
+          escCell((h.firmware_hints || []).join('; ') || '—'),
+        ];
+      }));
+    }
+    renderEksHosts('');
+    const fek = document.getElementById('filter-eks-hosts');
+    if (fek) fek.addEventListener('input', e => renderEksHosts(e.target.value));
+
+    const pm = eks.purdue_model || {};
+    const levels = pm.levels || [];
+    const pbClass = { '5': 'pb5', '4': 'pb4', '3': 'pb3', '2': 'pb2', '1': 'pb1', '0': 'pb0' };
+    const stackEl = document.getElementById('purdue-stack');
+    levels.forEach(L => {
+      const d = document.createElement('div');
+      d.className = 'purdue-bar ' + (pbClass[L.level] || 'pb5');
+      d.innerHTML = '<strong>Level ' + L.level + '</strong> — ' + (L.name || '') + '<br/><span style="font-weight:400;opacity:0.9">' + (L.summary || '') + '</span>';
+      stackEl.appendChild(d);
+    });
+    document.getElementById('purdue-conduits').textContent = pm.conduits_note || '';
+
+    const seg = eks.segmentation || {};
+    document.getElementById('seg-title').textContent = seg.title || 'OT segmentation';
+    const sp = document.getElementById('seg-principles');
+    (seg.principles || []).forEach(p => {
+      const li = document.createElement('li');
+      li.textContent = p;
+      sp.appendChild(li);
+    });
+    const sr = document.getElementById('seg-refs');
+    (seg.references || []).forEach(r => {
+      const li = document.createElement('li');
+      li.textContent = r;
+      sr.appendChild(li);
+    });
+
+    const cat = eks.components_catalog || [];
+    fillTable('tbl-eks-catalog',
+      ['ID', 'Name', 'Category', 'Purdue levels', 'Description'],
+      cat.map(c => [
+        c.id, c.name, c.category, (c.purdue_isa95_levels || []).join(', '),
+        (c.description || '').replace(/</g,'&lt;')
+      ]));
+
+    const byC = obs.by_component_id || {};
+    document.getElementById('eks-observed-summary').innerHTML =
+      '<strong>' + inv.length + '</strong> host(s) listed individually above · ' +
+      '<strong>' + (obs.component_types_observed ?? 0) + '</strong> distinct EKS component id(s) inferred · ' +
+      '<strong>' + (obs.assets_with_tags ?? 0) + '</strong> host(s) with ≥1 EKS tag · ' +
+      'catalog <strong>' + (obs.component_types_in_catalog ?? 0) + '</strong> component definitions';
+
+    const obsRows = Object.keys(byC).sort((a,b) => (byC[b]-byC[a]) || a.localeCompare(b)).map(k => [k, byC[k]]);
+    fillTable('tbl-eks-observed', ['Component ID', 'Host count (heuristic)'], obsRows);
+
+    const no = obs.catalog_ids_not_observed_in_capture || [];
+    document.getElementById('eks-not-observed').textContent = no.length ? no.join(', ') : '(none — all catalog IDs matched at least one host)';
+
+    (function initKpiDrills() {
+      const drillRoot = document.getElementById('overview-drill');
+      const mainEl = document.getElementById('overview-main');
+      const titleEl = document.getElementById('overview-drill-title');
+      const bodyEl = document.getElementById('overview-drill-body');
+      const backBtn = document.getElementById('overview-back-btn');
+      const kr = document.getElementById('kpi-row');
+      if (!drillRoot || !mainEl || !titleEl || !bodyEl || !backBtn || !kr) return;
+
+      const invHosts = eks.hosts_inventory || [];
+      const evRowsDrill = meta.input_evidence || [];
+      const topo = REPORT.topology || {};
+
+      function flowIsIcs(fl) {
+        if (Array.isArray(fl.ics_protocols) && fl.ics_protocols.length) return true;
+        if (fl.ics_protocol && String(fl.ics_protocol).trim()) return true;
+        return false;
+      }
+
+      function flowCells(fl) {
+        return [
+          escCell(fl.src_ip),
+          escCell(fl.dst_ip),
+          escCell(String(fl.src_port) + '→' + String(fl.dst_port)),
+          escCell(fl.transport_protocol || ''),
+          escCell(fl.ics_protocol || '—'),
+          escCell(fl.packet_count),
+          escCell(fl.byte_count),
+          escCell(fl.has_write_operations ? 'yes' : ''),
+          escCell(fl.exception_count != null ? fl.exception_count : ''),
+        ];
+      }
+
+      function tableHtml(headers, rowsCells, cap) {
+        const capN = cap != null ? cap : 500;
+        const slice = rowsCells.slice(0, capN);
+        const more = rowsCells.length > capN
+          ? '<p class="drill-note">Showing ' + capN + ' of ' + rowsCells.length + ' rows.</p>'
+          : '';
+        const thead = '<thead><tr>' + headers.map(function (h) { return '<th>' + escCell(h) + '</th>'; }).join('') + '</tr></thead>';
+        const tbody = '<tbody>' + slice.map(function (cells) {
+          return '<tr>' + cells.map(function (c) { return '<td>' + c + '</td>'; }).join('') + '</tr>';
+        }).join('') + '</tbody>';
+        return more + '<div class="scroll drill-scroll"><table class="data">' + thead + tbody + '</table></div>';
+      }
+
+      function kvTable(rows) {
+        const tr = rows.map(function (r) {
+          return '<tr><th>' + escCell(r[0]) + '</th><td>' + escCell(r[1]) + '</td></tr>';
+        }).join('');
+        return '<table class="data">' + tr + '</table>';
+      }
+
+      function assetCells(a) {
+        return [
+          escCell(a.ip_address),
+          escCell(a.role),
+          escCell((a.eks_components || []).join(', ')),
+          escCell(a.mac_address || ''),
+          escCell(a.vendor || ''),
+          escCell((a.protocols_seen || []).join(', ')),
+          escCell((a.open_ports || []).slice(0, 12).join(',') + ((a.open_ports || []).length > 12 ? '…' : '')),
+          escCell(a.packet_count),
+          escCell(a.bytes_total),
+          escCell(a.risk_score),
+        ];
+      }
+
+      const flowHdr = ['Src', 'Dst', 'Ports', 'Trans', 'ICS', 'Pkts', 'Bytes', 'Writes', 'Exc'];
+
+      const builders = {
+        packets: function () {
+          return {
+            title: 'Packets & capture window',
+            html: kvTable([
+              ['Total packets (metadata)', meta.total_packets != null ? String(meta.total_packets) : '—'],
+              ['Packets (deep survey window)', cw.packets_total != null ? String(cw.packets_total) : '—'],
+              ['Packets with IPv4', cw.packets_with_ipv4 != null ? String(cw.packets_with_ipv4) : '—'],
+              ['Non-IP frames', cw.non_ip_frames != null ? String(cw.non_ip_frames) : '—'],
+              ['Capture span (seconds)', cw.span_seconds != null ? String(cw.span_seconds) : '—'],
+              ['Avg. packets / second', cw.avg_packets_per_second != null ? String(cw.avg_packets_per_second) : '—'],
+              ['First packet (UTC)', cw.first_packet_utc || '—'],
+              ['Last packet (UTC)', cw.last_packet_utc || '—'],
+            ]),
+          };
+        },
+        unique_hosts: function () {
+          const u = deep.uniques || {};
+          const ad = deep.addressing || {};
+          let html = kvTable([
+            ['Unique source IPv4', u.src_ipv4 != null ? String(u.src_ipv4) : '—'],
+            ['Unique destination IPv4', u.dst_ipv4 != null ? String(u.dst_ipv4) : '—'],
+            ['Displayed sum (src + dst sets)', u.src_ipv4 != null && u.dst_ipv4 != null ? String(u.src_ipv4 + u.dst_ipv4) : '—'],
+          ]);
+          html += '<p class="drill-section-title">Addressing hits (packets)</p>' + kvTable([
+            ['Source private', ad.src_private_hits != null ? String(ad.src_private_hits) : '—'],
+            ['Source public', ad.src_public_hits != null ? String(ad.src_public_hits) : '—'],
+            ['Destination private', ad.dst_private_hits != null ? String(ad.dst_private_hits) : '—'],
+            ['Destination public', ad.dst_public_hits != null ? String(ad.dst_public_hits) : '—'],
+          ]);
+          return { title: 'Unique hosts & addressing', html: html };
+        },
+        flows: function () {
+          const note = (meta.export_note ? escCell(meta.export_note) : '') +
+            (flows.length < (sum.flows_analyzed || 0)
+              ? '<br/>Flow list may be capped in this export; counts in summary use the full analysis.'
+              : '');
+          return {
+            title: 'All flows (this export)',
+            html: (note ? '<p class="drill-note">' + note + '</p>' : '') +
+              tableHtml(flowHdr, flows.map(flowCells), 500),
+          };
+        },
+        ot_protocols: function () {
+          const counts = {};
+          otProtos.forEach(function (p) { counts[p] = 0; });
+          flows.forEach(function (fl) {
+            const arr = fl.ics_protocols;
+            if (Array.isArray(arr) && arr.length) {
+              arr.forEach(function (p) { if (counts[p] !== undefined) counts[p]++; });
+            } else if (fl.ics_protocol) {
+              String(fl.ics_protocol).split(',').forEach(function (x) {
+                const t = x.trim();
+                if (counts[t] !== undefined) counts[t]++;
+              });
+            }
+          });
+          const rows = otProtos.map(function (p) { return [escCell(p), escCell(counts[p] || 0)]; });
+          if (!otProtos.length) {
+            return { title: 'OT / ICS protocol labels', html: '<p class="drill-note">No ICS-tagged application protocols inferred in this export.</p>' };
+          }
+          return {
+            title: 'OT / ICS protocol labels',
+            html: tableHtml(['Protocol', 'Flows referencing'], rows, 80),
+          };
+        },
+        assets: function () {
+          return {
+            title: 'Discovered assets',
+            html: tableHtml(
+              ['IP', 'Role', 'EKS tags', 'MAC', 'Vendor', 'Protocols', 'Ports', 'Pkts', 'Bytes', 'Risk'],
+              assets.map(assetCells),
+              500,
+            ),
+          };
+        },
+        ot_assets: function () {
+          if (!otAssets.length) {
+            return { title: 'OT / ICS assets', html: '<p class="drill-note">No hosts matched OT heuristics (ICS ports, parsers, field hints, or inferred roles).</p>' };
+          }
+          const rows = otAssets.map(function (a) {
+            return [
+              escCell(a.ip_address),
+              escCell(a.role),
+              escCell(a.ot_signals_summary || (Array.isArray(a.ot_signals) ? a.ot_signals.join('; ') : '')),
+              escCell((a.eks_components || []).join(', ')),
+              escCell((a.protocols_seen || []).join(', ')),
+              escCell((a.open_ports || []).slice(0, 12).join(',')),
+              escCell(a.risk_score),
+            ];
+          });
+          return {
+            title: 'OT / ICS assets',
+            html: tableHtml(['IP', 'Role', 'OT signals', 'EKS tags', 'Protocols', 'Ports', 'Risk'], rows, 500),
+          };
+        },
+        anomalies: function () {
+          if (!anomalies.length) {
+            return { title: 'Anomalies', html: '<p class="drill-note">No anomaly events in this report.</p>' };
+          }
+          const rows = anomalies.map(function (e) {
+            return [
+              escCell(e.event_id),
+              escCell(e.severity),
+              escCell(e.category),
+              escCell(e.rule_id),
+              escCell((e.description || '').slice(0, 400) + ((e.description || '').length > 400 ? '…' : '')),
+            ];
+          });
+          return {
+            title: 'Anomalies (all severities)',
+            html: tableHtml(['ID', 'Severity', 'Category', 'Rule', 'Description'], rows, 500),
+          };
+        },
+        critical: function () {
+          const crit = anomalies.filter(function (e) { return e.severity === 'CRITICAL'; });
+          if (!crit.length) {
+            return { title: 'Critical anomalies', html: '<p class="drill-note">No CRITICAL-severity anomaly events.</p>' };
+          }
+          const rows = crit.map(function (e) {
+            return [
+              escCell(e.event_id),
+              escCell(e.category),
+              escCell(e.rule_id),
+              escCell((e.description || '').slice(0, 500) + ((e.description || '').length > 500 ? '…' : '')),
+            ];
+          });
+          return { title: 'Critical anomalies', html: tableHtml(['ID', 'Category', 'Rule', 'Description'], rows, 200) };
+        },
+        runtime: function () {
+          return {
+            title: 'Analysis run',
+            html: kvTable([
+              ['Wall time (seconds)', meta.duration_seconds != null ? String(meta.duration_seconds) : '—'],
+              ['Analysis timestamp (UTC)', meta.analysis_timestamp || '—'],
+              ['Tool version', meta.version != null ? String(meta.version) : '—'],
+              ['Analysis mode', meta.analysis_mode || '—'],
+            ]),
+          };
+        },
+        inputs: function () {
+          const files = meta.input_files || [];
+          let html = '<p class="drill-section-title">Input files (' + files.length + ')</p>';
+          html += files.length
+            ? '<ul style="margin:0.35rem 0 0 1.2rem;color:var(--text);font-size:0.85rem;">' +
+              files.map(function (f) { return '<li><code style="font-size:0.78rem;">' + escCell(f) + '</code></li>'; }).join('') + '</ul>'
+            : '<p class="drill-note">No input paths recorded.</p>';
+          html += '<p class="drill-section-title">Evidence integrity (SHA-256)</p>';
+          if (!evRowsDrill.length) {
+            html += '<p class="drill-note">No per-file hash rows in metadata.</p>';
+          } else {
+            html += tableHtml(
+              ['File', 'Size (bytes)', 'SHA-256'],
+              evRowsDrill.map(function (r) {
+                return [
+                  escCell(r.filename || r.path || ''),
+                  escCell(r.size_bytes != null ? String(r.size_bytes) : ''),
+                  escCell(r.sha256 || ''),
+                ];
+              }),
+              100,
+            );
+          }
+          return { title: 'Inputs & evidence', html: html };
+        },
+        flow_bytes: function () {
+          const sorted = flows.slice().sort(function (a, b) { return (b.byte_count || 0) - (a.byte_count || 0); });
+          const top = sorted.slice(0, 60).map(flowCells);
+          return {
+            title: 'Flow bytes',
+            html: kvTable([
+              ['Total bytes (summed on flows)', fs.total_bytes != null ? String(fs.total_bytes) : '—'],
+              ['Total packets (summed on flows)', fs.total_packets != null ? String(fs.total_packets) : '—'],
+            ]) + '<p class="drill-section-title">Top flows by bytes</p>' +
+              tableHtml(flowHdr, top, 60),
+          };
+        },
+        ics_flows: function () {
+          const subset = flows.filter(flowIsIcs);
+          return {
+            title: 'ICS / parser-tagged flows',
+            html: '<p class="drill-note">' + subset.length + ' flow(s) with ICS protocol labels in this export.</p>' +
+              tableHtml(flowHdr, subset.map(flowCells), 500),
+          };
+        },
+        write_flows: function () {
+          const subset = flows.filter(function (fl) { return fl.has_write_operations; });
+          return {
+            title: 'Flows with write operations',
+            html: '<p class="drill-note">' + subset.length + ' flow(s) with industrial write operations observed.</p>' +
+              tableHtml(flowHdr, subset.map(flowCells), 500),
+          };
+        },
+        exc_flows: function () {
+          const subset = flows.filter(function (fl) { return (fl.exception_count || 0) > 0; });
+          return {
+            title: 'Flows with protocol exceptions',
+            html: '<p class="drill-note">' + subset.length + ' flow(s) with non-zero exception counts.</p>' +
+              tableHtml(flowHdr, subset.map(flowCells), 500),
+          };
+        },
+        risk_assets: function () {
+          const subset = assets.filter(function (a) { return (a.risk_score || 0) > 0; });
+          if (!subset.length) {
+            return { title: 'Assets with risk', html: '<p class="drill-note">No assets with risk score &gt; 0.</p>' };
+          }
+          return {
+            title: 'Assets with risk score &gt; 0',
+            html: tableHtml(
+              ['IP', 'Role', 'EKS tags', 'MAC', 'Vendor', 'Protocols', 'Ports', 'Pkts', 'Bytes', 'Risk'],
+              subset.map(assetCells),
+              500,
+            ),
+          };
+        },
+        eks_tagged: function () {
+          const tagged = invHosts.filter(function (h) { return (h.eks_components || []).length > 0; });
+          if (!tagged.length) {
+            return { title: 'EKS-tagged hosts', html: '<p class="drill-note">No hosts with ≥1 EKS catalog tag.</p>' };
+          }
+          const rows = tagged.map(function (h) {
+            return [
+              escCell(h.ip_address),
+              escCell(h.role || ''),
+              escCell((h.eks_components || []).join(', ')),
+              escCell((h.protocols_seen || []).join(', ')),
+            ];
+          });
+          return {
+            title: 'Hosts with EKS tags',
+            html: tableHtml(['IP', 'Role', 'EKS components', 'Protocols'], rows, 500),
+          };
+        },
+        audit_rows: function () {
+          if (!auditFindings.length) {
+            return { title: 'Audit workbook', html: '<p class="drill-note">No structured audit findings.</p>' };
+          }
+          const rows = auditFindings.map(function (f) {
+            return [
+              escCell(f.finding_id),
+              escCell(f.severity),
+              escCell(f.category),
+              escCell(f.title),
+              escCell((f.narrative || '').slice(0, 280) + ((f.narrative || '').length > 280 ? '…' : '')),
+            ];
+          });
+          return {
+            title: 'Audit workbook findings',
+            html: tableHtml(['ID', 'Severity', 'Category', 'Title', 'Narrative (excerpt)'], rows, 200),
+          };
+        },
+        pattern_flows: function () {
+          const mbw = tp.modbus_write_flows || [];
+          const s7c = tp.s7_critical_flows || [];
+          const itp = tp.it_remote_protocol_flows || [];
+          let html = '';
+          html += '<p class="drill-section-title">Modbus write flows (' + mbw.length + ')</p>';
+          html += mbw.length
+            ? tableHtml(
+              ['Flow ID', 'Src', 'Dst', 'Ports', 'Write FCs', 'Interpretation', 'Pkts'],
+              mbw.map(function (r) {
+                return [
+                  escCell(r.flow_id),
+                  escCell(r.src_ip),
+                  escCell(r.dst_ip),
+                  escCell(String(r.src_port) + '→' + String(r.dst_port)),
+                  escCell((r.write_function_codes || []).join(', ')),
+                  escCell(r.interpretation || ''),
+                  escCell(r.packet_count),
+                ];
+              }),
+              120,
+            )
+            : '<p class="drill-note">None.</p>';
+          html += '<p class="drill-section-title">S7 critical service hints (' + s7c.length + ')</p>';
+          html += s7c.length
+            ? tableHtml(
+              ['Flow ID', 'Src', 'Dst', 'Ports', 'S7 codes', 'Interpretation', 'Pkts'],
+              s7c.map(function (r) {
+                return [
+                  escCell(r.flow_id),
+                  escCell(r.src_ip),
+                  escCell(r.dst_ip),
+                  escCell(String(r.src_port) + '→' + String(r.dst_port)),
+                  escCell((r.s7_service_codes_hex || []).join(', ')),
+                  escCell(r.interpretation || ''),
+                  escCell(r.packet_count),
+                ];
+              }),
+              120,
+            )
+            : '<p class="drill-note">None.</p>';
+          html += '<p class="drill-section-title">IT-style remote access on OT-relevant paths (' + itp.length + ')</p>';
+          html += itp.length
+            ? tableHtml(
+              ['Flow ID', 'Src', 'Dst', 'Ports', 'Service hint', 'Pkts'],
+              itp.map(function (r) {
+                return [
+                  escCell(r.flow_id),
+                  escCell(r.src_ip),
+                  escCell(r.dst_ip),
+                  escCell(String(r.src_port) + '→' + String(r.dst_port)),
+                  escCell(r.service_hint || ''),
+                  escCell(r.packet_count),
+                ];
+              }),
+              120,
+            )
+            : '<p class="drill-note">None.</p>';
+          return { title: 'Threat-pattern flow roll-ups', html: html };
+        },
+        avg_pps: function () {
+          return {
+            title: 'Average packet rate',
+            html: kvTable([
+              ['Avg. packets / second', cw.avg_packets_per_second != null ? String(cw.avg_packets_per_second) : '—'],
+              ['Capture span (seconds)', cw.span_seconds != null ? String(cw.span_seconds) : '—'],
+              ['Packets (survey window)', cw.packets_total != null ? String(cw.packets_total) : '—'],
+            ]),
+          };
+        },
+        periodic: function () {
+          if (!periodicFlows.length) {
+            return { title: 'Periodic flows', html: '<p class="drill-note">No periodic / polling-like flow candidates.</p>' };
+          }
+          const rows = periodicFlows.map(function (p) {
+            return [
+              escCell(p.src_ip),
+              escCell(p.dst_ip),
+              escCell(p.protocol),
+              escCell(p.period_seconds),
+              escCell(p.cv),
+              escCell(p.packet_count),
+            ];
+          });
+          return {
+            title: 'Periodic / polling-like flows',
+            html: tableHtml(['Src', 'Dst', 'Protocol', 'Period s', 'CV', 'Pkts'], rows, 300),
+          };
+        },
+        graph_nodes: function () {
+          const gs = topo.graph_stats || {};
+          let html = kvTable([
+            ['Nodes', gs.total_nodes != null ? String(gs.total_nodes) : '—'],
+            ['Edges', gs.total_edges != null ? String(gs.total_edges) : '—'],
+            ['Density', gs.density != null ? String(gs.density) : '—'],
+            ['Weakly connected', gs.is_connected != null ? String(gs.is_connected) : '—'],
+          ]);
+          const nodes = topo.nodes || [];
+          if (nodes.length) {
+            const nrows = nodes.slice(0, 250).map(function (n) {
+              return [
+                escCell(n.ip_address),
+                escCell(n.device_role || ''),
+                escCell((n.ics_protocols || []).join(', ')),
+                escCell(n.risk_score),
+                escCell(n.zone || ''),
+              ];
+            });
+            html += '<p class="drill-section-title">Topology nodes (up to 250)</p>' +
+              tableHtml(['IP', 'Role', 'ICS protocols', 'Risk', 'Zone'], nrows, 250);
+          } else {
+            html += '<p class="drill-note">No node list in topology export.</p>';
+          }
+          return { title: 'Topology graph', html: html };
+        },
+      };
+
+      function showDrill(id) {
+        const b = builders[id];
+        if (!b) return;
+        const out = typeof b === 'function' ? b() : b;
+        titleEl.textContent = out.title;
+        bodyEl.innerHTML = out.html;
+        drillRoot.hidden = false;
+        mainEl.hidden = true;
+        drillRoot.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        backBtn.focus();
+      }
+
+      function hideDrill() {
+        drillRoot.hidden = true;
+        mainEl.hidden = false;
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+
+      backBtn.addEventListener('click', hideDrill);
+
+      kr.querySelectorAll('[data-drill]').forEach(function (card) {
+        const id = card.getAttribute('data-drill');
+        card.addEventListener('click', function () { showDrill(id); });
+        card.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            showDrill(id);
+          }
+        });
+      });
+    })();
+  })();
+  </script>
+</body>
+</html>
